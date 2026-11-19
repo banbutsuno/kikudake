@@ -1,0 +1,2849 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- YouTube refuses to play an embedded video unless the page tells it where it is embedded. -->
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="theme-color" content="#193e3c">
+<title>きくだけ</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+:root{
+  color-scheme:dark;
+  --glass:#12302f;      /* 地: 夜のチューナーのガラス */
+  --panel:#193e3c;      /* 操作部 */
+  --panel-2:#21504d;
+  --well:#0d2625;       /* 目盛り窓・入力欄の底 */
+  --line:#2c5f5b;
+  --light:#eaf2d3;      /* 目盛りの光（文字） */
+  --dim:#9bbcae;
+  --faint:#6f9689;
+  --lamp:#ffb347;       /* 針とランプ */
+  --lamp-ink:#3a2300;
+  --warn:#ff9c8c;
+  --jp:"Noto Sans JP","Noto Sans CJK JP","BIZ UDPGothic","Yu Gothic UI",sans-serif;
+  --din:"Bahnschrift","Roboto Condensed","DIN Alternate",sans-serif-condensed,"Noto Sans JP",sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%;margin:0}
+body{background:var(--glass);color:var(--light);font:16px/1.5 var(--jp);-webkit-font-smoothing:antialiased;overflow:hidden;
+  -webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:pointer;touch-action:manipulation}
+input,textarea,select{font:inherit;color:inherit}
+input::placeholder{color:var(--faint);opacity:1}
+:focus{outline:none}
+:focus-visible{outline:2px solid var(--lamp);outline-offset:2px}
+svg{display:block;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+svg .solid{fill:currentColor;stroke:none}
+
+#app{display:flex;flex-direction:column;height:100%;max-width:560px;margin:0 auto}
+
+/* --- 操作部。動きつづける飾りは置かない（古い端末で熱と電池を食うため） --- */
+#deck{flex:none;padding:10px 12px 8px;background:var(--panel);border-bottom:1px solid var(--line)}
+#mid{display:flex;margin-top:8px}
+/* YouTubeの再生エンジンだけを画面外に置き、操作部には映像の余白を作らない。 */
+#yt-wrap{position:fixed;left:-10000px;top:0;width:200px;height:200px;pointer-events:none}
+#yt-wrap iframe,#yt-wrap>div{display:block;width:100%;height:100%;border:0}
+#side{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:6px}
+#count{flex:none;font:600 30px/1 var(--din);font-variant-numeric:tabular-nums;padding-top:2px}
+.tb{position:relative;flex:none;width:46px;height:46px;border-radius:50%;display:grid;place-items:center}
+.tb svg{width:26px;height:26px}
+.tb:active{background:var(--panel-2)}
+#b-play{width:66px;height:66px;background:var(--lamp);color:var(--lamp-ink)}
+#b-play:active{background:#ffc470}
+#b-play svg{width:30px;height:30px}
+body.is-loading #b-play::after{content:"";position:absolute;inset:-5px;border-radius:50%;border:2px solid transparent;border-top-color:var(--lamp);animation:spin .9s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.pn{display:flex;align-items:center;gap:10px}
+.tg{display:flex;flex-wrap:wrap;justify-content:center;gap:2px}
+.tg .tb{width:38px;height:38px}
+.tg .tb svg{width:22px;height:22px}
+.tgl{color:var(--faint)}
+.tgl[aria-pressed="true"]{color:var(--lamp)}
+.tgl[aria-pressed="true"]::after{content:"";position:absolute;bottom:3px;left:50%;width:4px;height:4px;margin-left:-2px;border-radius:50%;background:var(--lamp)}
+
+#now{display:flex;align-items:flex-end;gap:12px;min-height:64px}
+#now .what{flex:1;min-width:0}
+#title{margin:0;max-height:46px;font-size:17px;line-height:23px;font-weight:700;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.subrow{display:flex;gap:10px;font-size:12.5px;line-height:18px;color:var(--dim)}
+#sub{flex:1;min-width:0;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#timer-left{flex:none;font-family:var(--din);font-variant-numeric:tabular-nums;color:var(--lamp)}
+
+/* 目盛り窓: 再生位置をチューナーの針で示す */
+#dial{position:relative;height:38px;margin-top:8px;border-radius:5px;background:var(--well);box-shadow:inset 0 0 0 1px var(--line);touch-action:none;--p:0}
+#dial .glass{position:absolute;inset:0 12px}
+#dial .played{position:absolute;top:0;bottom:0;left:-12px;width:calc(var(--p)*100% + 12px);border-radius:5px 0 0 5px;background:linear-gradient(90deg,rgba(255,179,71,0),rgba(255,179,71,.17))}
+#dial i{position:absolute;bottom:0;width:1px;height:8px;margin-left:-.5px;background:var(--faint)}
+#dial i.mid{height:13px;background:var(--dim)}
+#dial i.maj{height:20px;background:var(--light)}
+#dial .needle{position:absolute;top:0;bottom:0;left:calc(var(--p)*100%);width:2px;margin-left:-1px;background:var(--lamp);box-shadow:0 0 6px rgba(255,179,71,.7)}
+#dial.is-off .needle,#dial.is-off .played{display:none}
+#marks{position:relative;height:16px;margin:3px 12px 0;font:500 11.5px/16px var(--din);font-variant-numeric:tabular-nums;color:var(--dim)}
+#marks span{position:absolute;top:0;transform:translateX(-50%);white-space:nowrap}
+#marks span:first-child{transform:none}
+#marks span:last-child{transform:translateX(-100%)}
+
+/* --- 曲のリスト --- */
+#shelf{position:relative;flex:1;min-height:0;display:flex;flex-direction:column}
+#notice{flex:none;margin:8px 10px 0;padding:9px 11px;border-radius:6px;background:#3d2c12;color:#ffdcae;font-size:13px;line-height:1.65}
+/* ジャンルの切り替え: チューナーのバンド切り替えのように、選んだ1つに灯がともる */
+#genres{flex:none;display:flex;gap:2px;padding:4px 8px 0;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none}
+#genres::-webkit-scrollbar{display:none}
+.chip{position:relative;flex:none;height:40px;padding:0 12px;border-radius:6px;font-size:14.5px;color:var(--dim);white-space:nowrap}
+.chip:active{background:var(--panel)}
+.chip[aria-pressed="true"]{color:var(--lamp)}
+.chip[aria-pressed="true"]::after{content:"";position:absolute;left:12px;right:12px;bottom:5px;height:2px;border-radius:1px;background:var(--lamp)}
+.chip.plus{color:var(--faint)}
+#genre-form{flex:none;display:flex;flex-wrap:wrap;gap:6px;padding:8px 10px 0}
+#genre-name{flex:1;min-width:120px;height:42px;padding:0 10px;border-radius:6px;border:1px solid var(--line);background:var(--well);font-size:16px}
+#genre-form button{flex:none;min-height:42px;padding:0 12px;border-radius:6px;font-size:14px;box-shadow:inset 0 0 0 1px var(--line)}
+#genre-form button[type=submit]{background:var(--light);color:var(--glass);font-weight:700;box-shadow:none}
+#genre-form #b-preset{flex:1 1 100%;padding:8px 12px;color:var(--dim);text-align:left}
+#shelf-head{flex:none;padding:6px 10px 2px}
+#filter{display:block;width:100%;height:40px;padding:0 10px;border-radius:6px;border:1px solid var(--line);background:var(--well);font-size:16px}
+#list{flex:1;min-height:60px;overflow-y:auto;padding:0 6px 8px;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+.genre-head{padding:14px 8px 0;font-size:13px;font-weight:700;letter-spacing:.06em}
+.genre-head:first-child{padding-top:8px}
+.grp{display:flex;align-items:center;gap:8px;min-height:38px;padding:8px 2px 0 8px;font-size:12.5px;color:var(--dim)}
+.grp .gname{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.grp .n{margin-left:auto;font-family:var(--din);font-variant-numeric:tabular-nums}
+.grp .more{flex:none;height:30px;padding:0 10px;border-radius:15px;font-size:12px;color:var(--dim);box-shadow:inset 0 0 0 1px var(--line);white-space:nowrap}
+.grp .rm{margin-left:auto}
+.grp .n+.rm{margin-left:0}
+.row{display:flex;align-items:center;gap:8px;min-height:46px;padding:0 2px 0 8px;border-radius:6px}
+.row:active{background:var(--panel)}
+.row .mark{flex:none;width:14px;height:14px;display:flex;align-items:flex-end;gap:2px}
+.row .name{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .name.unknown{color:var(--dim);font-family:var(--din)}
+.row .meta{flex:none;font:500 12px/1 var(--din);font-variant-numeric:tabular-nums;color:var(--dim)}
+.row .meta:empty{display:none}
+.row.cur{background:var(--panel);box-shadow:inset 3px 0 0 var(--lamp)}
+.row.cur .name{color:var(--lamp)}
+.row.cur .mark b{width:3px;background:var(--lamp);height:45%}
+.row.cur .mark b:nth-child(2){height:100%}
+.row.cur .mark b:nth-child(3){height:70%}
+.row.bad .name{color:var(--faint)}
+.note{padding:8px 8px 8px 30px;font-size:13px;color:var(--dim)}
+.note.err{color:var(--warn)}
+.tag{flex:none;font-size:11.5px;color:var(--warn);white-space:nowrap}
+.rm{flex:none;min-width:40px;height:40px;border-radius:20px;display:grid;place-items:center;color:var(--faint)}
+.rm svg{width:14px;height:14px}
+.rm:active{background:var(--panel-2);color:var(--light)}
+.rm.ask{padding:0 12px;background:var(--warn);color:#3b0d06;font-size:13px;font-weight:700}
+.rm-space{flex:none;width:6px}
+#empty{padding:14px 12px;color:var(--dim);font-size:14px;line-height:1.7}
+#empty strong{display:block;margin-bottom:4px;color:var(--light);font-size:16px}
+#empty p{margin:0}
+.starter{margin-top:10px;min-height:44px;padding:8px 14px;border-radius:6px;color:var(--light);font-size:14px;text-align:left;box-shadow:inset 0 0 0 1px var(--line)}
+.starter:active{background:var(--panel)}
+#choose{flex:none;margin:0 10px 8px;padding:10px 12px;border-radius:6px;background:var(--panel-2);font-size:13.5px;line-height:1.6}
+.choose-q{display:block}
+.choose-btns{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.choose-b{min-height:42px;padding:6px 12px;border-radius:6px;background:var(--light);color:var(--glass);font-size:14px;font-weight:700}
+.choose-b.quiet{background:none;color:var(--dim);font-weight:400;box-shadow:inset 0 0 0 1px var(--line)}
+#add{flex:none;display:flex;gap:6px;padding:8px 10px;border-top:1px solid var(--line);background:var(--panel)}
+#add-url{flex:1;min-width:0;height:42px;padding:0 10px;border-radius:6px;border:1px solid var(--line);background:var(--well);font-size:16px}
+#add button[type=submit]{flex:none;height:42px;padding:0 14px;border-radius:6px;background:var(--light);color:var(--glass);font-weight:700}
+#b-more{flex:none;width:42px;height:42px;border-radius:50%;display:grid;place-items:center;color:var(--dim)}
+#b-more svg{width:22px;height:22px}
+#b-more:active{background:var(--panel-2)}
+
+/* 下から出る選択肢・文字での編集・めざましの設定。どれもリストの範囲の中に出す */
+#sheet{position:absolute;z-index:5;left:0;right:0;bottom:0;max-height:100%;overflow-y:auto;padding:2px 8px 10px;background:var(--panel-2);border-top:1px solid var(--line);box-shadow:0 -10px 30px rgba(0,0,0,.4)}
+.sheet-head{display:flex;align-items:center;justify-content:space-between;padding:4px 0 0 10px;font-size:13px;color:var(--dim)}
+.sheet-x{width:42px;height:42px;border-radius:50%;display:grid;place-items:center}
+.sheet-x svg{width:18px;height:18px}
+.sheet-items{display:grid;grid-template-columns:1fr}
+.sheet-items.two{grid-template-columns:1fr 1fr;column-gap:6px}
+.sheet-item{display:block;width:100%;min-height:46px;padding:8px 10px;border-radius:6px;text-align:left}
+.sheet-item:active{background:var(--panel)}
+.sheet-item[aria-checked="true"]{color:var(--lamp)}
+.sheet-item.wide{grid-column:1/-1;margin-top:4px;border-radius:0 0 6px 6px;box-shadow:inset 0 1px 0 var(--line)}
+#editor,#alarm{position:absolute;z-index:6;top:0;right:0;bottom:0;left:0;display:flex;flex-direction:column;gap:8px;padding:10px 12px;background:var(--glass)}
+#alarm{overflow-y:auto;padding-bottom:0}
+/* 押すところは、中身を送っても下に見えたままにする */
+#alarm .ed-btns{position:sticky;bottom:0;margin-top:auto;padding:8px 0 10px;background:var(--glass);box-shadow:0 -8px 8px -8px rgba(0,0,0,.5)}
+.ed-help{margin:0;font-size:12.5px;line-height:1.6;color:var(--dim)}
+#ed-text{flex:1;min-height:80px;width:100%;padding:8px 10px;border-radius:6px;border:1px solid var(--line);background:var(--well);font-size:14px;line-height:1.6;white-space:pre;overflow:auto;resize:none}
+.ed-btns{flex:none;display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
+.ed-btns button{min-height:42px;padding:0 14px;border-radius:6px;box-shadow:inset 0 0 0 1px var(--line)}
+#ed-save,#al-set{background:var(--light);color:var(--glass);font-weight:700;box-shadow:none}
+.al-title{flex:none;margin:0;font-size:15px;font-weight:700}
+.al-grid{flex:none;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.al-field{display:flex;flex-direction:column;gap:2px;min-width:0;font-size:12.5px;color:var(--dim)}
+.al-field.wide{grid-column:1/-1}
+.al-field input,.al-field select{width:100%;height:44px;padding:0 8px;border-radius:6px;border:1px solid var(--line);background:var(--well);color:var(--light);font-size:16px}
+.al-check{flex:none;display:flex;align-items:center;gap:10px;min-height:40px;font-size:14px}
+.al-check input{flex:none;width:22px;height:22px;margin:0;accent-color:var(--lamp)}
+
+/* めざましが鳴っているあいだの操作 */
+#ring{position:absolute;z-index:8;left:0;right:0;bottom:0;padding:12px 12px 14px;background:var(--panel-2);border-top:2px solid var(--lamp);box-shadow:0 -10px 30px rgba(0,0,0,.45)}
+#ring-title{margin:0 0 10px;font:600 20px/1.2 var(--din);font-variant-numeric:tabular-nums;color:var(--lamp)}
+.ring-btns{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:8px}
+.ring-btns button{min-height:60px;padding:4px;border-radius:8px;font-size:14px;line-height:1.3;box-shadow:inset 0 0 0 1px var(--line)}
+.ring-btns #ring-stop{background:var(--lamp);color:var(--lamp-ink);font-size:19px;font-weight:700;box-shadow:none}
+#toast{position:absolute;z-index:7;left:50%;bottom:66px;transform:translateX(-50%);width:max-content;max-width:calc(100% - 24px);padding:8px 14px;border-radius:10px;background:var(--light);color:var(--glass);font-size:13px;line-height:1.5;opacity:0;pointer-events:none;transition:opacity .2s}
+#toast.show{opacity:1}
+
+/* めざましを待つあいだの、暗い時計。寝室でまぶしくないよう、黒地に沈んだ色だけを使う */
+#night{position:fixed;z-index:50;top:0;right:0;bottom:0;left:0;display:flex;align-items:center;justify-content:center;padding:24px;background:#000;color:#5f726b;text-align:center;-webkit-user-select:none;user-select:none}
+#night-in{max-width:320px}
+#night-clock{margin:0;font:600 78px/1 var(--din);font-variant-numeric:tabular-nums;letter-spacing:.02em;color:#8a6a2c}
+#night-info{margin:14px 0 0;font-size:16px;color:#7d6636}
+#night-src{margin:4px 0 0;font-size:13px}
+#night-note{margin:22px 0 0;font-size:12.5px;line-height:1.7}
+#night-note.warn{color:#a8655a}
+#night-off{margin-top:22px;min-height:48px;padding:0 22px;border-radius:24px;font-size:14px;color:#7c8f88;box-shadow:inset 0 0 0 1px #2a3532}
+body.night #app{visibility:hidden}
+
+@media (max-width:340px){
+  #count{font-size:24px}
+  #b-play{width:54px;height:54px}
+  .tb{width:40px;height:40px}
+  .pn{gap:4px}
+  .tg .tb{width:28px;height:36px}
+  .tg .tb svg{width:20px;height:20px}
+}
+/* 少し背の低い画面（ブラウザの上下の帯で狭くなったとき）は、操作部を詰めてリストに場所をゆずる */
+@media (max-height:600px){
+  #now{min-height:42px}
+  #title{max-height:23px;-webkit-line-clamp:1}
+  #dial{height:30px;margin-top:6px}
+  #dial i.maj{height:16px}
+  #dial i.mid{height:11px}
+  #marks{display:none}
+  #deck{padding-bottom:10px}
+}
+/* 背の低い画面（文字入力中や横向き）は、ページ全体を送れるようにする */
+@media (max-height:540px){
+  body{overflow:auto}
+  #app{height:auto;min-height:100%}
+  #shelf{min-height:320px}
+  #list{overflow:visible}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="deck">
+    <div id="now">
+      <div class="what">
+        <h1 id="title">きくだけ</h1>
+        <div class="subrow"><p id="sub">リストの曲を流すだけのプレイヤー</p><span id="timer-left" hidden></span></div>
+      </div>
+      <output id="count" aria-label="再生位置">0:00</output>
+    </div>
+    <div id="dial" class="is-off" role="slider" tabindex="0" aria-label="再生位置" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
+      <div class="glass"><div class="played"></div><div id="ticks"></div><div class="needle"></div></div>
+    </div>
+    <div id="marks" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
+    <div id="mid">
+      <div id="side">
+        <div class="pn">
+          <button class="tb" id="b-prev" type="button" aria-label="前の曲"></button>
+          <button class="tb" id="b-play" type="button" aria-label="再生"></button>
+          <button class="tb" id="b-next" type="button" aria-label="次の曲"></button>
+        </div>
+        <div class="tg">
+          <button class="tb tgl" id="b-shuffle" type="button" aria-pressed="false" aria-label="シャッフル"></button>
+          <button class="tb tgl" id="b-repeat" type="button" aria-pressed="false" aria-label="リピート"></button>
+          <button class="tb tgl" id="b-timer" type="button" aria-pressed="false" aria-label="タイマーとめざまし"></button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="shelf">
+    <div id="notice" role="alert" hidden></div>
+    <div id="genres" role="group" aria-label="ジャンル"></div>
+    <form id="genre-form" autocomplete="off" novalidate hidden>
+      <input id="genre-name" type="text" maxlength="30" placeholder="ジャンルの名前（例: 朝）" aria-label="ジャンルの名前">
+      <button type="submit">作る</button>
+      <button type="button" id="genre-cancel">やめる</button>
+      <button type="button" id="b-preset">英語のラジオとポッドキャストをまとめて入れる</button>
+    </form>
+    <div id="shelf-head" hidden>
+      <input id="filter" type="search" placeholder="リストをしぼりこむ" aria-label="リストをしぼりこむ" autocomplete="off">
+    </div>
+    <div id="list" role="list"></div>
+    <div id="choose" hidden></div>
+    <form id="add" autocomplete="off" novalidate>
+      <input id="add-url" type="text" inputmode="url" placeholder="URLを貼って追加" aria-label="追加するURL" spellcheck="false" autocapitalize="off">
+      <button type="submit">追加</button>
+      <button id="b-more" type="button" aria-label="その他"></button>
+    </form>
+    <div id="sheet" role="menu" hidden></div>
+    <div id="editor" hidden>
+      <p class="ed-help">1行に1つ。YouTubeのURL、「radio URL 名前」、「podcast URL 名前」が書けます。[朝] のようにかっこで囲んだ行から下は、そのジャンルになります。PC版の playlist.txt と同じ書き方です。</p>
+      <textarea id="ed-text" aria-label="曲リスト" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off"></textarea>
+      <div class="ed-btns">
+        <button type="button" id="ed-cancel">やめる</button>
+        <button type="button" id="ed-save">保存する</button>
+      </div>
+    </div>
+    <div id="alarm" hidden>
+      <p class="al-title">めざまし</p>
+      <div class="al-grid">
+        <label class="al-field"><span>鳴らす時刻</span><input id="al-time" type="time"></label>
+        <label class="al-field"><span>鳴らす長さ</span><select id="al-len">
+          <option value="30">30分で止める</option>
+          <option value="60">60分で止める</option>
+          <option value="120">2時間で止める</option>
+          <option value="0">止めるまで</option>
+        </select></label>
+        <label class="al-field wide"><span>流すもの</span><select id="al-src"></select></label>
+      </div>
+      <label class="al-check"><input id="al-again" type="checkbox"><span>止めたあと、次の日も同じ時刻に待つ</span></label>
+      <p class="ed-help">セットすると暗い時計の画面になります。充電器につないで、そのまま置いてください（画面が消えると鳴らせません）。音の大きさは、端末のメディア音量のままです。</p>
+      <div class="ed-btns">
+        <button type="button" id="al-cancel">やめる</button>
+        <button type="button" id="al-test">ためす</button>
+        <button type="button" id="al-set">セットして待つ</button>
+      </div>
+    </div>
+    <div id="ring" role="alertdialog" aria-labelledby="ring-title" hidden>
+      <p id="ring-title">めざまし</p>
+      <div class="ring-btns">
+        <button type="button" id="ring-stop">止める</button>
+        <button type="button" id="ring-snooze">あと10分</button>
+        <button type="button" id="ring-keep">このまま聞く</button>
+      </div>
+    </div>
+    <div id="toast" role="status" aria-live="polite"></div>
+  </div>
+</div>
+<div id="night" hidden>
+  <div id="night-in">
+    <p id="night-clock"></p>
+    <p id="night-info"></p>
+    <p id="night-src"></p>
+    <p id="night-note"></p>
+    <button type="button" id="night-off">めざましをやめる</button>
+  </div>
+</div>
+<audio id="audio" preload="auto"></audio>
+<div id="yt-wrap" aria-hidden="true" inert hidden><div id="yt"></div></div>
+
+<script>
+(function () {
+'use strict';
+
+// このページは「きくだけ」のスマホ版。PC版（app/player.html）と同じ再生の仕組みを使い、
+// 曲リストはこのブラウザの中に保存する。YouTubeの曲は、YouTube公式の埋め込みプレイヤーで流す。
+// ラジオとポッドキャストは、配信元が公開している音声を、ブラウザ標準の <audio> で流す。
+
+// ====================================================================== 小道具
+
+
+var $ = function (id) { return document.getElementById(id); };
+
+var ICONS = {
+  play: '<path class="solid" d="M8 5.2v13.6a.6.6 0 0 0 .92.5l10.5-6.8a.6.6 0 0 0 0-1L8.92 4.7A.6.6 0 0 0 8 5.2z"/>',
+  pause: '<rect class="solid" x="6.5" y="5" width="4" height="14" rx="1"/><rect class="solid" x="13.5" y="5" width="4" height="14" rx="1"/>',
+  prev: '<rect class="solid" x="5" y="5.5" width="2.4" height="13" rx="1"/><path class="solid" d="M19.5 6.3v11.4a.5.5 0 0 1-.78.42l-8.6-5.7a.5.5 0 0 1 0-.84l8.6-5.7a.5.5 0 0 1 .78.42z"/>',
+  next: '<rect class="solid" x="16.6" y="5.5" width="2.4" height="13" rx="1"/><path class="solid" d="M4.5 6.3v11.4a.5.5 0 0 0 .78.42l8.6-5.7a.5.5 0 0 0 0-.84l-8.6-5.7a.5.5 0 0 0-.78.42z"/>',
+  shuffle: '<path d="M3 7h3.2c2 0 3.5 1 4.7 3l2.2 4c1.2 2 2.7 3 4.7 3H21"/><path d="M3 17h3.2c1.5 0 2.7-.6 3.7-1.7M14.1 8.7C15.1 7.6 16.3 7 17.8 7H21"/><path d="M18.5 4.5 21 7l-2.5 2.5M18.5 14.5 21 17l-2.5 2.5"/>',
+  repeat: '<path d="M4 11.5V10a3 3 0 0 1 3-3h12"/><path d="M16.5 4.5 19 7l-2.5 2.5"/><path d="M20 12.5V14a3 3 0 0 1-3 3H5"/><path d="M7.5 14.5 5 17l2.5 2.5"/>',
+  repeat1: '<path d="M4 11.5V10a3 3 0 0 1 3-3h12"/><path d="M16.5 4.5 19 7l-2.5 2.5"/><path d="M20 12.5V14a3 3 0 0 1-3 3H5"/><path d="M7.5 14.5 5 17l2.5 2.5"/><path d="M11.3 10.6 12.6 10v4.2" stroke-width="1.7"/>',
+  timer: '<circle cx="12" cy="13.5" r="7.5"/><path d="M12 9.5v4l2.6 1.6M9.5 3h5"/>',
+  reload: '<path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.8 4.2v4.6h-4.6"/>',
+  close: '<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>',
+  more: '<circle class="solid" cx="5.5" cy="12" r="1.8"/><circle class="solid" cx="12" cy="12" r="1.8"/><circle class="solid" cx="18.5" cy="12" r="1.8"/>'
+};
+function icon(name) {
+  return '<svg viewBox="0 0 24 24" aria-hidden="true">' + ICONS[name] + '</svg>';
+}
+
+function clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
+
+function fmtTime(sec) {
+  if (!isFinite(sec) || sec < 0) sec = 0;
+  sec = Math.floor(sec);
+  var h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+  return (h ? h + ':' + (m < 10 ? '0' : '') : '') + m + ':' + (s < 10 ? '0' : '') + s;
+}
+
+function el(tag, cls, text) {
+  var e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+}
+
+// ====================================================================== 覚えておくこと（このブラウザの中だけ）
+
+var STORE_KEY = 'kikudake.mobile.v1';
+var S = {
+  text: '',       // 曲リスト。PC版の playlist.txt と同じ書き方
+  shuffle: false, repeat: 'off',
+  lastKey: '', lastPos: 0,
+  genre: '*',     // 選んでいるジャンル（'*' はぜんぶ、'' はジャンルに入れていないもの）
+  titles: {},     // 動画ID → 曲名（一度再生するとわかる）
+  bad: {},        // 動画ID → 再生できなかった理由のコード
+  lists: {},      // 再生リストID → { ids: [動画ID…], t: 取得した時刻 }
+  feeds: {},      // ポッドキャスト → { t: 取得した時刻, title, feed: RSSの場所, items: [回…] }
+  open: {},       // 「ほかの回も」を開いているポッドキャスト
+  alarm: { time: '06:30', src: '', len: 60, again: false }   // めざましの設定
+};
+var storeOK = true;
+(function loadStore() {
+  var saved = null;
+  try { saved = JSON.parse(localStorage.getItem(STORE_KEY) || 'null'); } catch (e) { storeOK = false; }
+  if (saved && typeof saved === 'object') {
+    Object.keys(S).forEach(function (k) {
+      if (saved[k] != null && typeof saved[k] === typeof S[k] && Array.isArray(saved[k]) === Array.isArray(S[k])) S[k] = saved[k];
+    });
+  }
+  if (['off', 'all', 'one'].indexOf(S.repeat) < 0) S.repeat = 'off';
+  S.text = String(S.text).replace(/\r\n?/g, '\n');
+  var a = S.alarm;
+  S.alarm = {
+    time: /^([01]\d|2[0-3]):[0-5]\d$/.test(a.time) ? a.time : '06:30',
+    src: typeof a.src === 'string' ? a.src : '',
+    len: [0, 30, 60, 120].indexOf(a.len) >= 0 ? a.len : 60,
+    again: a.again === true
+  };
+})();
+var saveTimer = 0;
+function saveNow() {
+  clearTimeout(saveTimer); saveTimer = 0;
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(S)); storeOK = true; } catch (e) { storeOK = false; }
+  setNotice('store', storeOK ? '' : 'このブラウザには曲リストを保存できません（プライベートブラウジングや、保存を禁じる設定のときに起こります）。ページを閉じるとリストは消えます。');
+}
+function saveSoon() { if (!saveTimer) saveTimer = setTimeout(saveNow, 800); }
+
+// ====================================================================== お知らせ
+
+
+var toastTimer = 0;
+function toast(text, ms) {
+  var t = $('toast');
+  t.textContent = text;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function () { t.classList.remove('show'); }, ms || 4200);
+}
+
+var notices = {};   // 種類 → 文。消えるまで出しておく知らせ
+function setNotice(kind, text) {
+  if (text) notices[kind] = text; else delete notices[kind];
+  var keys = Object.keys(notices), box = $('notice');
+  box.hidden = !keys.length;
+  box.textContent = keys.map(function (k) { return notices[k]; }).join('\n');
+  box.style.whiteSpace = 'pre-line';
+}
+
+// ====================================================================== 曲リストの文（PC版の playlist.txt と同じ書き方）
+
+
+var OK_ID = /^[A-Za-z0-9_-]{11}$/;
+var OK_LIST = /^[A-Za-z0-9_-]{10,64}$/;
+
+// 文字列からYouTubeの動画または再生リストを読み取る
+function parseYT(raw) {
+  var s = String(raw || '').trim();
+  if (!s) return null;
+  if (OK_ID.test(s)) return { kind: 'video', id: s };
+  if (!/^https?:\/\//i.test(s)) s = 'https://' + s;
+  var u;
+  try { u = new URL(s); } catch (e) { return null; }
+  var host = u.hostname.toLowerCase().replace(/^(www|m|music)\./, '');
+  if (host === 'youtu.be') {
+    var short = u.pathname.split('/')[1] || '';
+    return OK_ID.test(short) ? { kind: 'video', id: short } : null;
+  }
+  if (host !== 'youtube.com' && host !== 'youtube-nocookie.com') return null;
+  var v = u.searchParams.get('v') || '', list = u.searchParams.get('list') || '';
+  var path = u.pathname.replace(/\/+$/, '');
+  var m = path.match(/^\/(?:embed|shorts|live|v)\/([A-Za-z0-9_-]{11})$/);
+  if (m) return { kind: 'video', id: m[1] };
+  if (path === '/watch' && OK_ID.test(v)) return { kind: 'video', id: v };
+  if (OK_LIST.test(list) && !OK_ID.test(v)) {
+    // RD… は自動生成の「ミックス」、WL/LL は本人専用のリストで、埋め込めない
+    if (/^(RD|WL$|LL$|LM$)/.test(list)) return { kind: 'bad', why: 'mix' };
+    return { kind: 'list', id: list };
+  }
+  return null;
+}
+
+// http(s) のURLなら整えて返す。ちがえば ''
+function cleanUrl(raw) {
+  var s = String(raw || '').trim();
+  if (!/^https?:\/\/\S+$/i.test(s)) return '';
+  try { return new URL(s).href; } catch (e) { return ''; }
+}
+
+// Apple Podcasts の番組ページのURLから、番組の番号を読み取る
+function appleId(url) {
+  var m = String(url).match(/^https?:\/\/(?:podcasts|itunes)\.apple\.com\/\S*?\bid(\d{5,12})(?!\d)/i);
+  return m ? m[1] : '';
+}
+
+function cleanGenre(raw) {
+  var s = String(raw || '').replace(/[\[\]\r\n]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 30).trim();
+  return s === '*' ? '＊' : s;
+}
+
+var KIND_WORD = { radio: 'radio', 'ラジオ': 'radio', podcast: 'podcast', 'ポッドキャスト': 'podcast' };
+
+// 1行を読み取る。空行とメモ（# で始まる行）は null、読み取れない行は { kind: 'unread' }
+//   [ジャンル名]           ここから下は、そのジャンル
+//   URL  曲名              YouTubeの動画か再生リスト
+//   radio URL  名前        流れつづける放送（インターネットラジオ）
+//   podcast URL  名前      ポッドキャスト（RSS か、Apple Podcasts の番組ページのURL）
+function parseLine(raw) {
+  var line = String(raw || '').trim();
+  if (!line || line.charAt(0) === '#') return null;
+  var h = line.match(/^\[(.*)\]$/);
+  if (h) {
+    var name = cleanGenre(h[1]);
+    return name ? { kind: 'genre', name: name } : { kind: 'unread' };
+  }
+  var m = line.match(/^(\S+)\s*(.*)$/);
+  var word = KIND_WORD[m[1].toLowerCase()];
+  if (word) {
+    var m2 = m[2].match(/^(\S+)\s*(.*)$/);
+    var url = m2 ? cleanUrl(m2[1]) : '';
+    if (!url) return { kind: 'unread' };
+    if (word === 'radio') return { kind: 'radio', id: url, url: url, title: m2[2].trim() };
+    var aid = appleId(url);
+    return { kind: 'podcast', id: aid ? 'apple:' + aid : url, url: url, apple: aid, title: m2[2].trim() };
+  }
+  var p = parseYT(m[1]);
+  if (!p || p.kind === 'bad') return { kind: 'unread' };
+  return { kind: p.kind, id: p.id, title: m[2].trim() };
+}
+
+// リストの文 → 項目の並び。同じものは、ジャンルごとに1つだけ
+function parseEntries(text) {
+  var out = [], unread = 0, seen = {}, names = [], genre = '';
+  String(text || '').split('\n').forEach(function (raw, idx) {
+    var p = parseLine(raw);
+    if (!p) return;
+    if (p.kind === 'unread') { unread++; return; }
+    if (p.kind === 'genre') {
+      genre = p.name;
+      if (names.indexOf(genre) < 0) names.push(genre);
+      return;
+    }
+    var key = genre + '\n' + p.kind + ':' + p.id;
+    if (seen[key]) return;
+    seen[key] = true;
+    p.line = idx; p.genre = genre;
+    out.push(p);
+  });
+  return { entries: out, unread: unread, genres: names };
+}
+
+// 行を探して書き換える小さな関数たち（どれも「文 → 新しい文」）
+function lineMatches(raw, kind, id) {
+  var p = parseLine(raw);
+  return !!p && p.kind === kind && p.id === id;
+}
+function textLines(text) {
+  var body = String(text || '').replace(/\n+$/, '');
+  return body ? body.split('\n') : [];
+}
+// ジャンルの区画: 見出しの次の行から、次の見出しの手前まで。'' は最初の見出しより前。なければ null
+function sectionOf(lines, genre) {
+  var from = genre ? -1 : 0;
+  for (var i = 0; i < lines.length; i++) {
+    var p = parseLine(lines[i]);
+    if (!p || p.kind !== 'genre') continue;
+    if (from >= 0) return { from: from, to: i };
+    if (p.name === genre) from = i + 1;
+  }
+  return from < 0 ? null : { from: from, to: lines.length };
+}
+function textAdd(text, url, title, genre) {
+  var line = url + (title ? '  ' + title : '');
+  var lines = textLines(text);
+  genre = genre || '';
+  var sec = sectionOf(lines, genre);
+  if (!sec) {
+    // まだないジャンル: 見出しごと末尾に足す
+    if (lines.length) lines.push('');
+    lines.push('[' + genre + ']', line);
+  } else {
+    var at = sec.to;
+    while (at > sec.from && !lines[at - 1].trim()) at--;   // 区画の終わりの空行は、足した行の下に残す
+    lines.splice(at, 0, line);
+  }
+  return lines.join('\n') + '\n';
+}
+function textAddGenre(text, name) {
+  var lines = textLines(text);
+  if (sectionOf(lines, name)) return text;
+  if (lines.length) lines.push('');
+  lines.push('[' + name + ']');
+  return lines.join('\n') + '\n';
+}
+function textRemove(text, kind, id, genre) {   // genre を省くと、最初に見つかった行
+  var lines = text.split('\n'), here = '';
+  for (var i = 0; i < lines.length; i++) {
+    var p = parseLine(lines[i]);
+    if (!p) continue;
+    if (p.kind === 'genre') { here = p.name; continue; }
+    if (p.kind === kind && p.id === id && (genre == null || genre === here)) { lines.splice(i, 1); break; }
+  }
+  return lines.join('\n');
+}
+function textSetTitles(text, titles) {   // titles: 動画ID → 曲名。曲名のない行にだけ書き足す
+  return text.split('\n').map(function (raw) {
+    var line = raw.trim();
+    if (!line || line.charAt(0) === '#') return raw;
+    var m = line.match(/^(\S+)\s*(.*)$/);
+    if (m[2].trim()) return raw;
+    var p = parseYT(m[1]);
+    if (p && p.kind === 'video' && titles[p.id]) return m[1] + '  ' + titles[p.id].replace(/\s+/g, ' ').trim();
+    return raw;
+  }).join('\n');
+}
+
+// 英語のラジオとポッドキャストのひとそろい（どれも、配信元が公開している聞き方）。[ジャンル, 行のあたま, 名前]
+var PRESET = [
+  ['朝の英語', 'radio https://vprbbc.streamguys1.com/vprbbc24.mp3', 'BBC World Service（英語ニュース）'],
+  ['朝の英語', 'radio https://vpr.streamguys1.com/vpr64.mp3', 'Vermont Public（米国の公共ラジオ）'],
+  ['朝の英語', 'podcast https://podcasts.apple.com/podcast/id160904630', 'TED Talks Daily'],
+  ['朝の英語', 'podcast https://podcasts.apple.com/podcast/id814040014', 'Hapa英会話（英語＋日本語の解説）'],
+  ['子どもの英語', 'podcast https://podcasts.apple.com/podcast/id1418029100', 'KidNuz（子ども向けニュース）'],
+  ['子どもの英語', 'podcast https://podcasts.apple.com/podcast/id1246443751', 'Circle Round（世界の昔話）'],
+  ['子どもの英語', 'podcast https://podcasts.apple.com/podcast/id1103320303', 'But Why（子どもの「なぜ？」）'],
+  ['朝の音楽', 'radio https://vprclassical.streamguys1.com/vprclassical64.mp3', 'Vermont Public Classical（クラシック）']
+];
+function textAddPreset(text) {
+  PRESET.forEach(function (row) {
+    var probe = parseLine(row[1]);
+    var has = parseEntries(text).entries.some(function (e) { return e.genre === row[0] && e.kind === probe.kind && e.id === probe.id; });
+    if (!has) text = textAdd(text, row[1], row[2], row[0]);
+  });
+  return text;
+}
+
+var entries = [];
+var textGenres = [];   // リストの文に出てくるジャンルの名前
+var unreadLines = 0;
+var listStatus = {};   // 再生リストID → 'loading' | 'error'
+var serverFiles = [];  // 手持ちの音楽ファイルを流せるのはPC版だけ
+var fileTrouble = null;
+var FEED_PROXY = '';   // ポッドキャストのRSSは、このページから直接読みに行く
+
+function HttpError(status) { this.status = status; }
+
+function readList(text) {
+  var parsed = parseEntries(text);
+  entries = parsed.entries;
+  unreadLines = parsed.unread;
+  textGenres = parsed.genres;
+}
+function parseStored() { readList(S.text); }
+
+// 曲リストの文を書き換える。PC版では配信役に書き込みを頼む関数で、呼び方をそろえてある
+function savePlaylist(change) {
+  var next = String(change(S.text)).replace(/\r\n?/g, '\n');
+  if (next !== S.text) { S.text = next; parseStored(); saveSoon(); }
+  return Promise.resolve(true);
+}
+
+// スマホ版だけの言い回し
+var WORDS = {
+  tagline: 'リストの曲を流すだけのプレイヤー',
+  empty: ['下の欄にYouTubeのURL（動画か再生リスト）を貼って「追加」を押すと、ここに並びます。'],
+  listHint: '曲を止めてから「…」の「一覧を読み直す」を選ぶと、曲の一覧を読み込みます。',
+  listBusy: '再生リストの曲は、いまの曲を止めてから「…」の「一覧を読み直す」で読み込みます。',
+  podHint: '「…」の「一覧を読み直す」で、番組の一覧を読み込みます。',
+  podError: '番組の一覧を読み込めませんでした。ブラウザからは読ませない配信元かもしれません。Apple Podcasts の番組ページのURLで入れ直すと、読めることがあります。',
+  unread: function (n) { return 'リストに読み取れない行が ' + n + ' 行あります（「…」の「リストを文字で編集する」で直せます）。'; },
+  cantWrite: 'リストを書き換えられませんでした。',
+  key: function () { return ''; },
+  loneChip: false,   // ジャンルがまだないときは列を出さない（「…」から作れる）。リストに使える高さを減らさないため
+  blurAfterAdd: true
+};
+
+// ====================================================================== 曲の並び
+
+
+var tracks = [];     // 表示順の全項目
+var keyIndex = {};   // key → tracks の位置
+var groups = [];     // 見出しのつくまとまり { id, label, kind, genre, entry, from, to }
+var genres = [];     // ジャンルの名前（リストの文に出てくる順）
+var cur = -1;        // いま選ばれている項目（tracks の位置）
+var badAudio = {};   // 鳴らせなかった音声（この起動のあいだだけ）
+var POD_OPEN = 8;    // ポッドキャストを開いたときに見せる回の数（閉じているときは最新の1回だけ）
+
+// 項目の種類: yt（YouTube）/ file（音楽ファイル）/ radio（放送）/ pod（ポッドキャストの1回）
+function titleOf(t) {
+  if (t.type !== 'yt') return t.name;
+  return t.given || S.titles[t.vid] || '';
+}
+function shownTitle(t) {
+  return titleOf(t) || ('ID ' + t.vid);
+}
+function isBad(t) {
+  return t.type === 'yt' ? !!S.bad[t.vid] : !!badAudio[t.key];
+}
+var BAD_LABEL = { 2: 'URLが正しくない', 5: '再生できない', 100: '見つからない・非公開', 101: '埋め込み不可', 150: '埋め込み不可' };
+
+// 選ばれているジャンル: '*' はぜんぶ、'' はジャンルに入れていないもの
+function inScope(t) {
+  return S.genre === '*' || t.genre === S.genre;
+}
+function scopeList() {
+  var a = [];
+  for (var i = 0; i < tracks.length; i++) if (inScope(tracks[i])) a.push(i);
+  return a;
+}
+function hostOf(url) {
+  try { return new URL(url).hostname; } catch (e) { return String(url); }
+}
+// 音楽ファイルは、入っているフォルダのどれかがジャンルと同じ名前なら、そのジャンルに入る
+function fileGenre(group) {
+  var parts = String(group).split('/');
+  for (var i = 0; i < parts.length; i++) if (textGenres.indexOf(parts[i]) >= 0) return parts[i];
+  return '';
+}
+
+function buildTracks() {
+  var curKey = cur >= 0 && tracks[cur] ? tracks[cur].key : '';
+  var keepKey = curKey || S.lastKey;   // 聞いている（聞きかけの）回は、新しい回が出ても並びに残す
+  var t = [], g = [];
+  function open(id, label, kind, genre, entry) {
+    var grp = { id: id, label: label, kind: kind, genre: genre, entry: entry || null, from: t.length, to: t.length };
+    g.push(grp);
+    return grp;
+  }
+  function runId(base) {   // 同じジャンルに2つめのまとまりができたら、番号をつけて区別する
+    return g.some(function (x) { return x.id === base; }) ? base + '#' + g.length : base;
+  }
+  genres = textGenres.slice();
+  var filesBy = {};
+  serverFiles.forEach(function (f) {
+    var name = fileGenre(f.group);
+    (filesBy[name] = filesBy[name] || []).push(f);
+  });
+  [''].concat(genres).forEach(function (genre) {
+    var suffix = genre ? '@' + genre : '';
+    var run = null;   // 続いている単独の項目（YouTubeの曲どうし、ラジオどうし）は、ひとつの見出しにまとめる
+    entries.forEach(function (e) {
+      if (e.genre !== genre) return;
+      if (e.kind === 'video') {
+        if (!run || run.kind !== 'yt') run = open(runId('yt' + suffix), 'YouTube', 'yt', genre);
+        t.push({ key: 'yt:' + e.id + suffix, type: 'yt', vid: e.id, given: e.title, group: 'YouTube', genre: genre, single: true, entry: e });
+        run.to = t.length;
+      } else if (e.kind === 'radio') {
+        if (!run || run.kind !== 'radio') run = open(runId('radio' + suffix), 'ラジオ', 'radio', genre);
+        t.push({ key: 'r:' + e.id + suffix, type: 'radio', src: e.url, name: e.title || hostOf(e.url), group: 'ラジオ', genre: genre, single: true, entry: e });
+        run.to = t.length;
+      } else if (e.kind === 'list') {
+        run = null;
+        var label = e.title || '再生リスト';
+        var gl = open('list:' + e.id + suffix, label, 'list', genre, e);
+        var cached = S.lists[e.id];
+        if (cached && cached.ids && cached.ids.length) {
+          cached.ids.forEach(function (vid) {
+            t.push({ key: 'yl:' + e.id + ':' + vid + suffix, type: 'yt', vid: vid, given: '', group: label, genre: genre, list: e.id });
+          });
+        }
+        gl.to = t.length;
+      } else if (e.kind === 'podcast') {
+        run = null;
+        var feed = S.feeds[e.id];
+        var plabel = e.title || (feed && feed.title) || 'ポッドキャスト';
+        var gp = open('pod:' + e.id + suffix, plabel, 'podcast', genre, e);
+        var shown = S.open[e.id] ? POD_OPEN : 1;
+        ((feed && feed.items) || []).forEach(function (it, n) {
+          var key = 'p:' + e.id + '#' + it.g + suffix;
+          if (n >= shown && key !== keepKey) return;
+          t.push({ key: key, type: 'pod', src: it.u, name: it.n || plabel, group: plabel, genre: genre, pod: e.id, guid: it.g, date: it.d || 0, secs: it.s || 0 });
+        });
+        gp.to = t.length;
+      }
+    });
+    var lastGroup = null, gf = null;
+    (filesBy[genre] || []).forEach(function (f) {
+      if (f.group !== lastGroup) {
+        if (gf) gf.to = t.length;
+        gf = open('f:' + f.group, f.group, 'file', genre);
+        lastGroup = f.group;
+      }
+      t.push({ key: 'f:' + f.k + ':' + f.name, type: 'file', name: f.name, group: f.group, genre: genre, src: '/track/' + f.i + '?k=' + f.k });
+    });
+    if (gf) gf.to = t.length;
+  });
+  tracks = t; groups = g; keyIndex = {};
+  t.forEach(function (x, i) { keyIndex[x.key] = i; });
+  cur = curKey && keyIndex[curKey] != null ? keyIndex[curKey] : -1;
+  if (bag) bag = bag.filter(function (k) { return keyIndex[k] != null; });
+  history = history.filter(function (k) { return keyIndex[k] != null; });
+  // 選んでいたジャンルがなくなっていたら「ぜんぶ」に戻す
+  if (S.genre !== '*' && (S.genre ? genres.indexOf(S.genre) < 0 : !hasLoose())) S.genre = '*';
+  return curKey && cur < 0;   // 流していたものがリストから消えた
+}
+
+// ジャンルがあるのに、どのジャンルにも入っていないものがあるか
+function hasLoose() {
+  return genres.length > 0 && tracks.some(function (t) { return t.genre === ''; });
+}
+
+// ====================================================================== 画面
+
+
+var rowEls = [];
+
+function renderList() {
+  var list = $('list');
+  list.textContent = '';
+  rowEls = [];
+  var frag = document.createDocumentFragment();
+  if (!tracks.length && !groups.length && !genres.length) {
+    var empty = el('div'); empty.id = 'empty';
+    empty.appendChild(el('strong', '', 'まだ何もありません'));
+    WORDS.empty.forEach(function (line) { empty.appendChild(el('p', '', line)); });
+    var start = el('button', 'starter', '英語のラジオとポッドキャストをまとめて入れる');
+    start.type = 'button'; start.dataset.act = 'preset';
+    empty.appendChild(start);
+    frag.appendChild(empty);
+  }
+  var showHeads = groups.length > 1;   // まとまりが1つだけなら、見出しは省く
+  var lastGenre = null;
+  groups.forEach(function (grp) {
+    if (genres.length && grp.genre !== lastGenre) {
+      lastGenre = grp.genre;
+      var gh = el('div', 'genre-head', grp.genre || 'ジャンルなし');
+      gh.dataset.genreHead = grp.genre;
+      frag.appendChild(gh);
+    }
+    var n = grp.to - grp.from;
+    var own = grp.kind === 'list' || grp.kind === 'podcast';   // リストの1行が、ひとまとまりになるもの
+    if (own || showHeads) {
+      var head = el('div', 'grp');
+      head.dataset.g = grp.id;
+      head.appendChild(el('span', 'gname', grp.label));
+      if (grp.kind === 'podcast') {
+        var feed = S.feeds[grp.entry.id];
+        if (feed && feed.items && feed.items.length > 1) {
+          var more = el('button', 'more', S.open[grp.entry.id] ? '最新だけにする' : 'ほかの回も');
+          more.type = 'button'; more.dataset.pod = grp.entry.id;
+          head.appendChild(more);
+        }
+      }
+      if (n && grp.kind !== 'radio' && grp.kind !== 'podcast') head.appendChild(el('span', 'n', n + '曲'));
+      if (own) {
+        var what = grp.kind === 'list' ? 'この再生リストをはずす' : 'このポッドキャストをはずす';
+        var rm = el('button', 'rm');
+        rm.type = 'button'; rm.title = what; rm.setAttribute('aria-label', what);
+        rm.dataset.rmKind = grp.entry.kind; rm.dataset.rmId = grp.entry.id; rm.dataset.rmGenre = grp.genre;
+        rm.innerHTML = icon('close');
+        head.appendChild(rm);
+      }
+      frag.appendChild(head);
+    }
+    if (own && !n) {
+      var st = grp.kind === 'list' ? listStatus[grp.entry.id] : feedStatus[grp.entry.id];
+      var words = grp.kind === 'list'
+        ? (st === 'error' ? '読み込めませんでした。非公開のリストか、URLがちがうようです。' : st === 'loading' ? '曲の一覧を読み込んでいます…' : WORDS.listHint)
+        : (st === 'error' ? WORDS.podError : st === 'loading' ? '番組の一覧を読み込んでいます…' : WORDS.podHint);
+      var note = el('div', 'note' + (st === 'error' ? ' err' : ''), words);
+      note.dataset.g = grp.id;
+      frag.appendChild(note);
+    }
+    for (var i = grp.from; i < grp.to; i++) frag.appendChild(makeRow(i));
+  });
+  var hint = el('div', 'note', 'このジャンルには、まだ何も入っていません。下の欄にURLを貼って追加すると、ここに入ります。');
+  hint.id = 'genre-empty'; hint.hidden = true;
+  frag.appendChild(hint);
+  list.appendChild(frag);
+  renderChips();
+  fitFilter();
+  applyFilter();
+  markRows();
+  setNotice('unread', unreadLines ? WORDS.unread(unreadLines) : '');
+}
+
+function makeRow(i) {
+  var t = tracks[i];
+  var row = el('div', 'row');
+  row.setAttribute('role', 'listitem');
+  row.tabIndex = 0;
+  row.dataset.i = i;
+  row.appendChild(el('span', 'mark'));
+  row.appendChild(el('span', 'name'));
+  row.appendChild(el('span', 'meta'));
+  var tag = el('span', 'tag');
+  tag.hidden = true;
+  row.appendChild(tag);
+  if (t.single) {
+    var rm = el('button', 'rm');
+    rm.type = 'button'; rm.title = 'リストからはずす'; rm.setAttribute('aria-label', 'リストからはずす');
+    rm.dataset.rmKind = t.entry.kind; rm.dataset.rmId = t.entry.id; rm.dataset.rmGenre = t.genre;
+    rm.innerHTML = icon('close');
+    row.appendChild(rm);
+  } else {
+    row.appendChild(el('span', 'rm-space'));
+  }
+  rowEls[i] = row;
+  paintRow(i);
+  return row;
+}
+
+function dayOf(ms) {
+  if (!ms) return '';
+  var d = new Date(ms);
+  return (d.getMonth() + 1) + '/' + d.getDate();
+}
+
+function paintRow(i) {
+  var row = rowEls[i], t = tracks[i];
+  if (!row || !t) return;
+  var name = row.children[1], meta = row.children[2], tag = row.children[3];
+  var title = titleOf(t);
+  name.textContent = title || ('ID ' + t.vid);
+  name.classList.toggle('unknown', !title);
+  row.title = title || 'まだ曲名がわかりません。一度流すと表示されます';
+  meta.textContent = t.type === 'radio' ? 'LIVE' : t.type === 'pod' ? dayOf(t.date) : '';
+  var bad = isBad(t);
+  row.classList.toggle('bad', bad);
+  tag.hidden = !bad;
+  tag.textContent = bad ? (t.type === 'yt' ? (BAD_LABEL[S.bad[t.vid]] || '再生できない') : t.type === 'radio' ? 'つながらない' : '再生できない') : '';
+}
+
+function markRows() {
+  rowEls.forEach(function (row, i) {
+    var on = i === cur;
+    if (row.classList.contains('cur') === on) return;
+    row.classList.toggle('cur', on);
+    row.children[0].innerHTML = on ? '<b></b><b></b><b></b>' : '';
+    if (on) row.setAttribute('aria-current', 'true'); else row.removeAttribute('aria-current');
+  });
+}
+
+function scrollToCurrent() {
+  var row = rowEls[cur];
+  if (row && !row.hidden && row.scrollIntoView) row.scrollIntoView({ block: 'nearest' });
+}
+
+// ジャンルの切り替え。チューナーのバンド切り替えのように、1つだけ灯る
+var genreFormOpen = false;
+function renderChips() {
+  var box = $('genres');
+  box.textContent = '';
+  // 名前を入れる欄を出しているあいだと、（スマホ版で）ジャンルがまだないときは、列ごとしまう
+  box.hidden = genreFormOpen || (!genres.length && !WORDS.loneChip);
+  function chip(value, label) {
+    var b = el('button', 'chip', label);
+    b.type = 'button';
+    b.dataset.genre = value;
+    b.setAttribute('aria-pressed', S.genre === value ? 'true' : 'false');
+    box.appendChild(b);
+  }
+  if (genres.length) {
+    chip('*', 'ぜんぶ');
+    genres.forEach(function (name) { chip(name, name); });
+    if (hasLoose()) chip('', 'ジャンルなし');
+  }
+  var plus = el('button', 'chip plus', genres.length ? '＋' : '＋ ジャンルを作る');
+  plus.type = 'button'; plus.id = 'b-genre-new';
+  plus.title = 'ジャンルを作る'; plus.setAttribute('aria-label', 'ジャンルを作る');
+  box.appendChild(plus);
+}
+
+// 検索欄は、見えている並びが長いときだけ出す
+function fitFilter() {
+  $('shelf-head').hidden = scopeList().length < 12;
+  if ($('shelf-head').hidden) $('filter').value = '';
+}
+
+// しぼりこみ: 選んだジャンルと、検索欄の文字の両方に合うものだけを見せる
+function applyFilter() {
+  var q = $('filter').value.trim().toLowerCase();
+  var visible = {}, heads = {}, mineAny = false;
+  rowEls.forEach(function (row, i) {
+    var t = tracks[i];
+    row.hidden = !(inScope(t) && (!q || (shownTitle(t) + '\n' + t.group).toLowerCase().indexOf(q) >= 0));
+  });
+  groups.forEach(function (grp) {
+    var any = false;
+    for (var i = grp.from; i < grp.to; i++) if (rowEls[i] && !rowEls[i].hidden) { any = true; break; }
+    var mine = S.genre === '*' || grp.genre === S.genre;
+    if (mine) mineAny = true;
+    visible[grp.id] = mine && (any || (!q && (grp.kind === 'list' || grp.kind === 'podcast')));
+    if (visible[grp.id]) heads[grp.genre] = true;
+  });
+  Array.prototype.forEach.call($('list').children, function (node) {
+    if (node.dataset.g != null) node.hidden = !visible[node.dataset.g];
+    else if (node.dataset.genreHead != null) node.hidden = S.genre !== '*' || !heads[node.dataset.genreHead];
+    else if (node.id === 'genre-empty') node.hidden = S.genre === '*' || mineAny || !!q;
+  });
+}
+
+var status = 'idle';     // idle | loading | playing | paused
+var want = false;        // 流したいかどうか（利用者の意思）
+var offList = '';        // YouTube側でリスト外の動画に移ったとき、その題名
+
+function paintNow() {
+  var t = tracks[cur];
+  var title = t ? (offList || shownTitle(t)) : 'きくだけ';
+  $('title').textContent = title;
+  $('sub').textContent = !t ? (tracks.length ? '曲を選ぶか、再生ボタンを押してください' : WORDS.tagline)
+    : offList ? 'リストにない動画が流れています'
+      : t.type === 'yt' ? (t.list ? t.group + '（YouTube）' : 'YouTube')
+        : t.type === 'radio' ? 'インターネットラジオ'
+          : t.type === 'pod' ? t.group + (t.date ? '・' + dayOf(t.date) : '')
+            : t.group;
+  document.title = t ? title + ' | きくだけ' : 'きくだけ';
+  var playing = status === 'playing';
+  document.body.classList.toggle('is-playing', playing);
+  document.body.classList.toggle('is-loading', want && status === 'loading');
+  var bp = $('b-play'), showPause = want && (playing || status === 'loading');
+  if (bp.dataset.icon !== (showPause ? 'pause' : 'play')) {
+    bp.dataset.icon = showPause ? 'pause' : 'play';
+    bp.innerHTML = icon(bp.dataset.icon);
+    bp.title = (showPause ? '一時停止' : '再生') + WORDS.key('スペース');
+    bp.setAttribute('aria-label', showPause ? '一時停止' : '再生');
+  }
+  // 画面を消していても、通知やイヤホンのボタンから操作できるようにする（ラジオ・ポッドキャスト・音楽ファイルのとき）
+  if ('mediaSession' in navigator) {
+    try {
+      navigator.mediaSession.metadata = t ? new MediaMetadata({ title: title, artist: t.type === 'yt' ? 'YouTube' : t.group, album: 'きくだけ' }) : null;
+      navigator.mediaSession.playbackState = playing ? 'playing' : (t ? 'paused' : 'none');
+    } catch (e) { /* なくても困らない */ }
+  }
+}
+
+function paintToggles() {
+  var sh = $('b-shuffle'), rp = $('b-repeat'), mu = $('b-mute'), vol = $('vol');
+  sh.setAttribute('aria-pressed', S.shuffle ? 'true' : 'false');
+  sh.title = (S.shuffle ? 'シャッフル中' : 'シャッフル') + WORDS.key('S');
+  rp.setAttribute('aria-pressed', S.repeat === 'off' ? 'false' : 'true');
+  rp.innerHTML = icon(S.repeat === 'one' ? 'repeat1' : 'repeat');
+  var rlabel = S.repeat === 'one' ? 'この曲をくり返す' : S.repeat === 'all' ? 'リスト全体をくり返す' : 'くり返さない';
+  rp.title = rlabel + WORDS.key('R');
+  rp.setAttribute('aria-label', 'リピート: ' + rlabel);
+  if (!mu || !vol) return;   // 音量のつまみがあるのはPC版だけ
+  var silent = S.muted || S.volume === 0;
+  mu.innerHTML = icon(silent ? 'muted' : 'volume');
+  mu.title = (S.muted ? '消音をやめる' : '消音') + WORDS.key('M');
+  mu.setAttribute('aria-label', S.muted ? '消音をやめる' : '消音');
+  vol.value = S.volume;
+  vol.style.setProperty('--v', S.volume + '%');
+}
+
+// --- 目盛り窓
+var pos = 0, dur = 0, live = false, dragging = false;
+
+function paintDial() {
+  var dial = $('dial');
+  var seekable = cur >= 0 && dur > 0 && !live;
+  var p = seekable ? clamp(pos / dur, 0, 1) : (live ? 1 : 0);
+  dial.style.setProperty('--p', p.toFixed(4));
+  dial.classList.toggle('is-off', cur < 0 || (!seekable && !live));
+  dial.classList.toggle('is-live', live);
+  dial.setAttribute('aria-valuemax', Math.round(seekable ? dur : 0));
+  dial.setAttribute('aria-valuenow', Math.round(seekable ? pos : 0));
+  dial.setAttribute('aria-valuetext', live ? 'ライブ配信' : fmtTime(pos) + ' / ' + fmtTime(dur));
+  $('count').textContent = live ? 'LIVE' : fmtTime(pos);
+  var marks = $('marks').children;
+  for (var i = 0; i < 5; i++) {
+    marks[i].style.left = (i * 25) + '%';
+    marks[i].textContent = seekable ? fmtTime(dur * i / 4) : '';
+  }
+}
+
+(function buildTicks() {
+  var box = $('ticks'), html = '';
+  for (var i = 0; i <= 40; i++) {
+    html += '<i' + (i % 10 === 0 ? ' class="maj"' : i % 5 === 0 ? ' class="mid"' : '') + ' style="left:' + (i * 2.5) + '%"></i>';
+  }
+  box.innerHTML = html;
+})();
+
+// ====================================================================== 鳴らす仕組み 1: YouTubeの公式埋め込みプレイヤー
+
+
+var YTE = {
+  promise: null, player: null,
+  state: -1,
+  vid: '',          // いま窓に読み込んである動画ID
+  token: 0,         // 読み込みごとの通し番号
+  endedToken: -1,
+  sawPlay: false, loadAt: 0, nudged: false
+};
+var harvest = { active: false, onState: null, onError: null, abort: null };
+var errRun = 0, stuckRun = 0;
+// 再生が始まらないとき: まず一度つつき、それでもだめなら次へ。広告を「始まらない」と見誤らないよう、長めに待つ
+var WAIT = { nudge: 6000, giveUp: 90000 };
+
+function ytEnsure() {
+  if (YTE.promise) return YTE.promise;
+  $('yt-wrap').hidden = false;   // 画面外で再生エンジンを初期化する
+  YTE.promise = new Promise(function (resolve, reject) {
+    var settled = false;
+    function fail(why) {
+      if (settled) return;
+      settled = true;
+      YTE.promise = null;
+      showStage();
+      setNotice('yt', 'YouTubeに接続できません。ネットワークを確かめてから、もう一度再生ボタンを押してください。');
+      reject(new Error(why));
+    }
+    var timer = setTimeout(function () { fail('timeout'); }, 20000);
+    function create() {
+      try {
+        var vars = {
+          autoplay: 0, controls: 1, disablekb: 1, fs: 0, rel: 0, iv_load_policy: 3,
+          playsinline: 1, hl: 'ja', origin: location.origin
+        };
+        // 最初に窓へ入れておくもの: 選ばれている曲、なければリストの先頭の曲、それもなければ先頭の再生リスト
+        var first = initialVideo(), firstList = entries.filter(function (e) { return e.kind === 'list'; })[0];
+        if (!first && firstList) { vars.listType = 'playlist'; vars.list = firstList.id; }
+        var opts = {
+          width: '100%', height: '100%',
+          playerVars: vars,
+          events: {
+            onReady: function () {
+              setNotice('yt', '');
+              applyVolume();
+              if (settled) {
+                // 待ちきれずにあきらめたあとで準備ができた: 次からはこのプレイヤーを使う
+                YTE.promise = Promise.resolve(YTE.player);
+                restoreStage();
+                return;
+              }
+              settled = true;
+              clearTimeout(timer);
+              resolve(YTE.player);
+            },
+            onStateChange: onYtState,
+            onError: onYtError,
+            onAutoplayBlocked: function () {
+              if (cur >= 0 && tracks[cur].type === 'yt' && want) {
+                want = false; status = 'paused'; paintNow();
+                toast('自動再生がブラウザに止められました。再生ボタンを押してください。', 8000);
+              }
+            }
+          }
+        };
+        if (first) opts.videoId = first;
+        YTE.player = new YT.Player('yt', opts);
+      } catch (e) { fail('create'); }
+    }
+    if (window.YT && window.YT.Player) { create(); return; }
+    window.onYouTubeIframeAPIReady = create;
+    var s = document.createElement('script');
+    s.src = 'https://www.youtube.com/iframe_api';
+    s.onerror = function () { fail('script'); };
+    document.head.appendChild(s);
+  });
+  return YTE.promise;
+}
+
+function initialVideo() {
+  var t = tracks[cur];
+  if (t && t.type === 'yt') return t.vid;
+  for (var i = 0; i < tracks.length; i++) if (tracks[i].type === 'yt' && !isBad(tracks[i])) return tracks[i].vid;
+  return '';
+}
+
+function ytData() {
+  try { return (YTE.player && YTE.player.getVideoData && YTE.player.getVideoData()) || {}; } catch (e) { return {}; }
+}
+
+function ytLoad(t, start, autoplay) {
+  var p = YTE.player;
+  YTE.vid = t.vid; YTE.token++; YTE.sawPlay = false; YTE.loadAt = Date.now(); YTE.nudged = false;
+  offList = '';
+  var arg = { videoId: t.vid, startSeconds: Math.max(0, Math.floor(start || 0)) };
+  if (autoplay) p.loadVideoById(arg); else p.cueVideoById(arg);
+  applyVolume();
+}
+
+function onYtState(e) {
+  var st = e.data;
+  YTE.state = st;
+  if (harvest.active) { if (harvest.onState) harvest.onState(st); return; }
+  var t = tracks[cur];
+  if (!t || t.type !== 'yt') return;
+  if (st === 1) {                       // 再生中
+    YTE.sawPlay = true; errRun = 0; stuckRun = 0;
+    if (status !== 'playing') announcePlaying();
+    status = 'playing'; want = true;
+    learnFromPlayer(true);
+  } else if (st === 2) {                // 一時停止（映像をクリックして止めた場合もここに来る）
+    status = 'paused'; want = false;
+  } else if (st === 3) {                // 読み込み中
+    status = 'loading';
+  } else if (st === 5) {                // 頭出し済み
+    status = 'paused';
+    learnFromPlayer();
+  } else if (st === 0) {                // 終わった
+    if (YTE.endedToken !== YTE.token) {
+      YTE.endedToken = YTE.token;
+      onTrackEnd();
+      return;
+    }
+  } else if (st === -1) {
+    if (want) status = 'loading';
+  }
+  paintNow();
+}
+
+function onYtError(e) {
+  var code = e.data;
+  if (harvest.active) { if (harvest.onError) harvest.onError(code); return; }
+  var t = tracks[cur];
+  if (!t || t.type !== 'yt') return;
+  YTE.vid = '';   // 窓の中身は使えない状態。次に再生するときは読み込み直す
+  if (code === 153) {
+    want = false; status = 'paused';
+    setNotice('yt', 'YouTubeが再生を断りました（エラー153）。このページをファイルのまま開いていると起こります。https:// で始まる場所に置いて、そこから開いてください。');
+    paintNow();
+    return;
+  }
+  if (code === 2 || code === 100 || code === 101 || code === 150) {
+    S.bad[t.vid] = code; saveSoon(true);
+    paintRow(cur);
+  }
+  var why = code === 101 || code === 150 ? '埋め込みが許可されていない' : code === 100 ? '見つからないか非公開の' : '再生できない';
+  errRun++;
+  var canGoOn = want && errRun <= Math.min(8, tracks.length);
+  toast(why + '曲' + (canGoOn ? 'を飛ばしました' : 'です') + '：' + shownTitle(t));
+  if (canGoOn) {
+    var ni = pickNext(false);
+    if (ni >= 0 && ni !== cur) { playIndex(ni, { auto: true }); return; }
+  }
+  want = false; status = 'paused';
+  paintNow();
+}
+
+// 曲名は再生するとプレイヤーから得られる
+function learnFromPlayer(playing) {
+  var t = tracks[cur];
+  if (!t || t.type !== 'yt') return;
+  var d = ytData();
+  if (!d.video_id || !d.title) return;
+  if (d.video_id === t.vid) {
+    offList = '';
+    rememberTitle(t.vid, String(d.title));
+  } else if (playing && YTE.vid === t.vid) {
+    offList = String(d.title);   // 映像の窓の中で、利用者が別の動画に移った
+  }
+}
+
+var titleWrites = {}, titleWriteTimer = 0;
+function rememberTitle(vid, title) {
+  title = String(title || '').replace(/\s+/g, ' ').trim();
+  if (!title || S.titles[vid] === title) return;
+  S.titles[vid] = title; saveSoon(true);
+  tracks.forEach(function (t, i) {
+    if (t.type === 'yt' && t.vid === vid) {
+      paintRow(i);
+      if (t.single && !t.given) titleWrites[vid] = title;
+    }
+  });
+  if (cur >= 0 && tracks[cur].vid === vid) paintNow();
+  // 曲リストの文にも曲名を書き足して、文字で編集するときにどの行がどの曲かわかるようにする
+  if (Object.keys(titleWrites).length && !titleWriteTimer) {
+    titleWriteTimer = setTimeout(function () {
+      titleWriteTimer = 0;
+      var batch = titleWrites; titleWrites = {};
+      savePlaylist(function (text) { return textSetTitles(text, batch); }).then(function () {
+        tracks.forEach(function (t) { if (t.single && batch[t.vid] && !t.given) t.given = batch[t.vid]; });
+      }, function () { /* 書けなくても、このブラウザは覚えている */ });
+    }, 2500);
+  }
+}
+
+// 再生前でも曲名がわかるように、YouTubeの公開情報（oEmbed）を試す。使えなければ黙ってあきらめる
+var oembedOK = null, titleQueue = [], titleBusy = 0;
+function queueTitles() {
+  if (oembedOK === false) return;
+  var seen = {};
+  titleQueue = [];
+  tracks.forEach(function (t) {
+    if (t.type === 'yt' && !titleOf(t) && !seen[t.vid] && !S.bad[t.vid]) { seen[t.vid] = true; titleQueue.push(t.vid); }
+  });
+  pumpTitles();
+}
+function pumpTitles() {
+  while (titleBusy < 2 && titleQueue.length && oembedOK !== false) {
+    (function (vid) {
+      titleBusy++;
+      fetch('https://www.youtube.com/oembed?format=json&url=' + encodeURIComponent('https://www.youtube.com/watch?v=' + vid), { credentials: 'omit' })
+        .then(function (r) { oembedOK = true; return r.ok ? r.json() : null; })
+        .then(function (j) { if (j && j.title) rememberTitle(vid, j.title); })
+        .catch(function () { if (oembedOK === null) oembedOK = false; })
+        .then(function () { titleBusy--; setTimeout(pumpTitles, 150); });
+    })(titleQueue.shift());
+  }
+}
+
+// 再生リストのURLから、中の動画IDの一覧を得る（プレイヤーに頭出しさせて聞き出す）
+function harvestOne(listId) {
+  return new Promise(function (resolve) {
+    var p = YTE.player, done = false, cued = false, before = '';
+    try { before = JSON.stringify(p.getPlaylist() || []); } catch (e) { before = ''; }
+    function read(force) {
+      var ids = null;
+      try { ids = p.getPlaylist(); } catch (e) { ids = null; }
+      if (!ids || !ids.length) return false;
+      if (!cued && !force && JSON.stringify(ids) === before) return false;   // まだ前のリストのまま
+      finish(ids.filter(function (id) { return OK_ID.test(id); }));
+      return true;
+    }
+    function finish(ids) {
+      if (done) return;
+      done = true;
+      clearInterval(iv); clearTimeout(to);
+      harvest.active = false; harvest.onState = null; harvest.onError = null; harvest.abort = null;
+      resolve(ids);
+    }
+    harvest.active = true;
+    YTE.vid = '';
+    harvest.onState = function (st) { if (st === 5) { cued = true; read(); } };
+    harvest.onError = function () { finish(null); };
+    harvest.abort = function () { finish('aborted'); };
+    var iv = setInterval(function () { read(false); }, 300);
+    var to = setTimeout(function () { if (!read(cued)) finish(null); }, 9000);
+    try { p.cuePlaylist({ listType: 'playlist', list: listId, index: 0 }); } catch (e) { finish(null); }
+  });
+}
+
+var expanding = false;
+function expandLists(force) {
+  var need = entries.filter(function (e) {
+    return e.kind === 'list' && (force || !(S.lists[e.id] && S.lists[e.id].ids && S.lists[e.id].ids.length));
+  });
+  if (!need.length || expanding) return Promise.resolve(false);
+  if (want && cur >= 0 && tracks[cur].type === 'yt') return Promise.resolve('busy');   // 曲を止めてまではやらない
+  expanding = true;
+  need.forEach(function (e) { if (!force || !S.lists[e.id]) listStatus[e.id] = 'loading'; });
+  renderList();
+  return ytEnsure().then(function () {
+    var chain = Promise.resolve();
+    need.forEach(function (e) {
+      chain = chain.then(function () {
+        if (want && cur >= 0 && tracks[cur].type === 'yt') return null;   // 途中で再生が始まったら、やめる
+        return harvestOne(e.id).then(function (ids) {
+          if (ids === 'aborted') return;
+          if (ids && ids.length) { S.lists[e.id] = { ids: ids, t: Date.now() }; delete listStatus[e.id]; }
+          else if (!S.lists[e.id]) listStatus[e.id] = 'error';
+          else delete listStatus[e.id];
+        });
+      });
+    });
+    return chain;
+  }).then(function () {
+    expanding = false;
+    saveNow();
+    need.forEach(function (e) { if (listStatus[e.id] === 'loading') delete listStatus[e.id]; });
+    var gone = buildTracks();
+    if (gone) stopAll();
+    renderList(); paintNow(); queueTitles();
+    restoreStage();
+    return true;
+  }, function () {
+    expanding = false;
+    need.forEach(function (e) { if (listStatus[e.id] === 'loading') delete listStatus[e.id]; });
+    renderList();
+    return false;
+  });
+}
+
+// 画面外の再生エンジンを、選ばれている曲に合わせる
+function showStage() {
+  var yt = !!YTE.player && cur >= 0 && tracks[cur].type === 'yt';
+  $('yt-wrap').hidden = !yt && !(YTE.promise && !YTE.player);
+}
+function restoreStage() {
+  if (!YTE.player) { showStage(); return; }
+  var t = tracks[cur];
+  if (t && t.type === 'yt') {
+    if (!want && YTE.vid !== t.vid) ytLoad(t, S.lastKey === t.key ? S.lastPos : 0, false);
+  } else {
+    try { YTE.player.stopVideo(); } catch (e) { /* まだ何も入っていない */ }
+    YTE.vid = '';
+  }
+  showStage();
+}
+
+// ====================================================================== 鳴らす仕組み 2: 音声（ラジオ・ポッドキャスト）
+
+// ラジオとポッドキャストは、配信元が公開している音声のURLを、ブラウザ標準の <audio> でそのまま流す
+
+var audio = $('audio');
+var audioKey = '';           // audio に読み込んである項目
+var audioPendingStart = 0;
+var audioTries = 0;          // 続けて失敗した回数
+var audioSince = 0;          // 音が出るのを待ちはじめた時刻（0 は待っていない）
+var AUDIO_WAIT = 25000;      // これだけ待っても音が出なければ、つなぎ直す
+
+function audioLoad(t, start, autoplay) {
+  audioKey = t.key;
+  audioPendingStart = t.type === 'radio' ? 0 : Math.max(0, start || 0);
+  audio.src = t.src;
+  applyVolume();
+  if (autoplay) audioPlay();
+}
+function audioPlay() {
+  audioSince = Date.now();
+  var p = audio.play();
+  if (p && p.catch) {
+    p.catch(function (err) {
+      if (err && err.name === 'NotAllowedError' && tracks[cur] && tracks[cur].key === audioKey) {
+        want = false; status = 'paused'; audioSince = 0; paintNow();
+      }
+    });
+  }
+}
+function dropAudio() {
+  audioKey = ''; audioSince = 0;
+  if (!audio.paused) audio.pause();
+  if (audio.getAttribute('src')) { audio.removeAttribute('src'); audio.load(); }
+}
+function curIsAudio() {
+  return cur >= 0 && tracks[cur].type !== 'yt' && tracks[cur].key === audioKey;
+}
+audio.addEventListener('loadedmetadata', function () {
+  if (audioPendingStart > 0 && isFinite(audio.duration) && audioPendingStart < audio.duration - 1) {
+    try { audio.currentTime = audioPendingStart; } catch (e) { /* 位置を戻せなくても鳴らす */ }
+  }
+  audioPendingStart = 0;
+});
+audio.addEventListener('playing', function () {
+  if (!curIsAudio()) return;
+  if (status !== 'playing') announcePlaying();
+  status = 'playing'; want = true; errRun = 0; audioTries = 0; audioSince = 0; paintNow();
+});
+audio.addEventListener('waiting', function () {
+  if (!curIsAudio()) return;
+  if (want) { status = 'loading'; if (!audioSince) audioSince = Date.now(); paintNow(); }
+});
+audio.addEventListener('pause', function () {
+  // 読み込みに失敗したときにも pause が届く。それは error のほうで扱う
+  if (!curIsAudio() || audio.ended || audio.error) return;
+  status = 'paused'; want = false; audioSince = 0; paintNow();
+});
+audio.addEventListener('ended', function () {
+  if (!curIsAudio()) return;
+  if (tracks[cur].type === 'radio') audioTrouble();   // 放送が切れた: つなぎ直す
+  else onTrackEnd();
+});
+audio.addEventListener('error', function () {
+  if (curIsAudio()) audioTrouble();
+});
+
+// 音が出ない・途切れた: 少し間をおいてつなぎ直し、それでもだめなら印をつけて次へ
+function audioTrouble() {
+  var t = tracks[cur], wanted = want, at = pos;
+  audioSince = 0;
+  if (t.type === 'file') { if (fileTrouble) fileTrouble(t, wanted, at); return; }
+  if (!wanted) { status = 'paused'; paintNow(); return; }
+  audioTries++;
+  if (audioTries <= 2) {
+    var key = t.key, token = playToken;
+    status = 'loading'; paintNow();
+    setTimeout(function () {
+      if (token !== playToken || !want || !tracks[cur] || tracks[cur].key !== key) return;
+      audioLoad(tracks[cur], at, true);
+    }, audioTries === 1 ? 1500 : 4000);
+    return;
+  }
+  audioTries = 0;
+  badAudio[t.key] = true;
+  paintRow(cur);
+  errRun++;
+  toast((navigator.onLine === false ? 'ネットワークにつながっていません：' : t.type === 'radio' ? 'この放送につながりません：' : '再生できませんでした：') + shownTitle(t));
+  if (errRun <= Math.min(8, tracks.length)) {
+    var ni = pickNext(false);
+    if (ni >= 0 && ni !== cur) { playIndex(ni, { auto: true }); return; }
+  }
+  want = false; status = 'paused'; paintNow();
+}
+
+// ====================================================================== ポッドキャストの回の一覧
+
+// 番組のRSSを読む。Apple Podcasts のURLで登録した番組は、Appleの公開カタログでRSSの場所を調べ、
+// RSSをブラウザから直接読めない配信元のときは、カタログに載っている回の一覧で代える（こちらは載るのが遅れることがある）
+
+var FEED_AGE = 60 * 60000;   // これより古い一覧は、開いたときに読み直す
+var FEED_HEAD = 600000;      // RSSは先頭のこの文字数だけ読む（新しい回は先頭にある。数MBある番組を古い端末で読み切らないため）
+var feedStatus = {};         // 番組 → 'loading' | 'error'
+var feedRun = null;
+var jsonpSeq = 0;
+
+function decodeXml(s) {
+  return String(s).replace(/&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|apos);/gi, function (all, name) {
+    name = name.toLowerCase();
+    if (name === 'amp') return '&';
+    if (name === 'lt') return '<';
+    if (name === 'gt') return '>';
+    if (name === 'quot') return '"';
+    if (name === 'apos') return "'";
+    var code = name.charAt(1) === 'x' ? parseInt(name.slice(2), 16) : parseInt(name.slice(1), 10);
+    try { return String.fromCodePoint(code); } catch (e) { return ''; }
+  });
+}
+function xmlText(block, tag) {
+  var m = block.match(new RegExp('<' + tag + '(?:\\s[^>]*)?>([\\s\\S]*?)</' + tag + '>', 'i'));
+  if (!m) return '';
+  var s = m[1].trim(), c = s.match(/^<!\[CDATA\[([\s\S]*?)\]\]>$/);
+  s = c ? c[1] : decodeXml(s);
+  return s.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+function clockToSeconds(s) {
+  var parts = String(s || '').trim().split(':'), sec = 0;
+  if (!parts[0] || parts.length > 3) return 0;
+  for (var i = 0; i < parts.length; i++) {
+    if (!/^\d+(\.\d+)?$/.test(parts[i])) return 0;
+    sec = sec * 60 + parseFloat(parts[i]);
+  }
+  return Math.round(sec);
+}
+function parseRss(xml) {
+  xml = String(xml || '');
+  var items = [], re = /<item[\s>][\s\S]*?<\/item>/gi, m;
+  var title = xmlText(xml.split(/<item[\s>]/i)[0], 'title');
+  while ((m = re.exec(xml)) && items.length < POD_OPEN) {
+    var block = m[0];
+    var enc = block.match(/<enclosure\b[^>]*?\burl\s*=\s*(?:"([^"]*)"|'([^']*)')/i);
+    var url = enc ? cleanUrl(decodeXml(enc[1] != null ? enc[1] : enc[2])) : '';
+    if (!url) continue;
+    items.push({
+      g: (xmlText(block, 'guid') || url).slice(0, 300),
+      u: url,
+      n: xmlText(block, 'title').slice(0, 200),
+      d: Date.parse(xmlText(block, 'pubDate')) || 0,
+      s: clockToSeconds(xmlText(block, 'itunes:duration'))
+    });
+  }
+  return { title: title.slice(0, 120), items: items };
+}
+
+// 文の先頭だけを読む
+function fetchHead(url, opts) {
+  var ctl = typeof AbortController === 'function' ? new AbortController() : null;
+  opts = opts || {};
+  if (ctl) opts.signal = ctl.signal;
+  var timer = setTimeout(function () { if (ctl) ctl.abort(); }, 20000);
+  return fetch(url, opts).then(function (r) {
+    if (!r.ok) throw new HttpError(r.status);
+    if (!r.body || !r.body.getReader || typeof TextDecoder !== 'function') return r.text();
+    var reader = r.body.getReader(), dec = new TextDecoder('utf-8'), text = '';
+    function pump() {
+      return reader.read().then(function (x) {
+        if (x.value) text += dec.decode(x.value, { stream: true });
+        if (x.done) return text;
+        if (text.length >= FEED_HEAD) {
+          try { reader.cancel().catch(function () {}); } catch (e) { /* 読むのをやめるだけ */ }
+          return text;
+        }
+        return pump();
+      });
+    }
+    return pump();
+  }).then(function (text) { clearTimeout(timer); return text; }, function (err) { clearTimeout(timer); throw err; });
+}
+
+function readRss(url) {
+  var ways = [];
+  if (FEED_PROXY) ways.push(function () { return fetchHead(FEED_PROXY + encodeURIComponent(url), { headers: { 'X-Kikudake': '1' }, cache: 'no-store' }); });
+  ways.push(function () { return fetchHead(url, { credentials: 'omit' }); });
+  var i = 0;
+  function attempt() {
+    return ways[i]().then(function (text) {
+      var feed = parseRss(text);
+      if (!feed.items.length) throw new Error('no episodes');
+      return feed;
+    }).catch(function (err) {
+      if (++i < ways.length) return attempt();
+      throw err;
+    });
+  }
+  return attempt();
+}
+
+// Appleの公開カタログ（iTunes Search API）。別のサイトのページからは、スクリプトとして読む決まりになっている
+function appleLookup(id) {
+  return new Promise(function (resolve, reject) {
+    var name = '__kikuPod' + (++jsonpSeq), s = document.createElement('script'), done = false;
+    function finish(err, data) {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      window[name] = function () {};
+      if (s.parentNode) s.parentNode.removeChild(s);
+      if (err) reject(err); else resolve(data);
+    }
+    var timer = setTimeout(function () { finish(new Error('timeout')); }, 15000);
+    window[name] = function (data) { finish(null, data); };
+    s.onerror = function () { finish(new Error('network')); };
+    s.src = 'https://itunes.apple.com/lookup?id=' + encodeURIComponent(id) + '&media=podcast&entity=podcastEpisode&limit=' + POD_OPEN + '&callback=' + name;
+    document.head.appendChild(s);
+  }).then(function (data) {
+    var show = null, items = [];
+    ((data && data.results) || []).forEach(function (r) {
+      if (!r) return;
+      if (r.wrapperType === 'podcastEpisode') {
+        var url = cleanUrl(r.episodeUrl);
+        if (url) items.push({
+          g: String(r.episodeGuid || r.trackId || url).slice(0, 300),
+          u: url,
+          n: String(r.trackName || '').slice(0, 200),
+          d: Date.parse(r.releaseDate) || 0,
+          s: Math.round((r.trackTimeMillis || 0) / 1000)
+        });
+      } else if (!show) {
+        show = r;
+      }
+    });
+    return { title: String((show && show.collectionName) || '').slice(0, 120), feed: cleanUrl(show && show.feedUrl), items: items };
+  });
+}
+
+function loadFeed(e) {
+  var old = S.feeds[e.id] || {};
+  var catalog = null;
+  var feedUrl = e.apple ? cleanUrl(old.feed) : e.url;
+  var step = Promise.resolve();
+  if (e.apple && !feedUrl) {
+    step = appleLookup(e.apple).then(function (a) { catalog = a; feedUrl = a.feed; });
+  }
+  return step.then(function () {
+    if (!feedUrl) throw new Error('no feed');
+    return readRss(feedUrl);
+  }).then(function (feed) {
+    return { title: feed.title || (catalog && catalog.title) || old.title || '', feed: feedUrl, via: 'rss', items: feed.items };
+  }, function (err) {
+    if (!e.apple) throw err;
+    return (catalog ? Promise.resolve(catalog) : appleLookup(e.apple)).then(function (a) {
+      if (!a.items.length) throw err;
+      return { title: a.title || old.title || '', feed: a.feed || feedUrl, via: 'apple', items: a.items };
+    });
+  });
+}
+
+function storeFeed(id, feed) {
+  var items = feed.items.slice(0, POD_OPEN);
+  var t = tracks[cur];
+  if (t && t.type === 'pod' && t.pod === id && !items.some(function (it) { return it.g === t.guid; })) {
+    items.push({ g: t.guid, u: t.src, n: t.name, d: t.date, s: t.secs });   // いま流している回は、流し終わるまで残す
+  }
+  S.feeds[id] = { t: Date.now(), title: feed.title, feed: feed.feed, via: feed.via, items: items };
+}
+
+// 回の一覧を読み直す。force でなければ、古くなったものだけ
+function refreshFeeds(force) {
+  if (feedRun) return feedRun.then(function () { return refreshFeeds(force); });   // 読んでいる最中なら、終わってからもう一度
+  var seen = {}, need = [];
+  entries.forEach(function (e) {
+    if (e.kind !== 'podcast' || seen[e.id]) return;
+    seen[e.id] = true;
+    var f = S.feeds[e.id];
+    if (force || !f || !f.items || !f.items.length || Date.now() - (f.t || 0) > FEED_AGE) need.push(e);
+  });
+  // リストからなくなった番組の控えは捨てる
+  Object.keys(S.feeds).forEach(function (id) { if (!seen[id]) { delete S.feeds[id]; delete S.open[id]; delete feedStatus[id]; } });
+  if (!need.length) return Promise.resolve(false);
+  var firstTime = false;
+  need.forEach(function (e) {
+    if (!(S.feeds[e.id] && S.feeds[e.id].items && S.feeds[e.id].items.length)) { feedStatus[e.id] = 'loading'; firstTime = true; }
+  });
+  if (firstTime) renderList();
+  var changed = false;
+  function worker() {
+    var e = need.shift();
+    if (!e) return Promise.resolve();
+    return loadFeed(e).then(function (feed) {
+      storeFeed(e.id, feed);
+      delete feedStatus[e.id];
+      changed = true;
+    }, function () {
+      if (feedStatus[e.id] === 'loading') feedStatus[e.id] = 'error';
+    }).then(worker);
+  }
+  feedRun = Promise.all([worker(), worker()]).then(function () {
+    feedRun = null;
+    saveSoon(true);
+    var gone = buildTracks();
+    if (gone) stopAll();
+    renderList(); paintNow();
+    return changed;
+  });
+  return feedRun;
+}
+
+// ====================================================================== 曲を進める
+
+
+var bag = null;      // シャッフルの残り（key）。null は「まだ配っていない」
+var history = [];    // 流した順（key）。「前の曲」で戻るため
+var playToken = 0;
+
+function shuffled(a) {
+  for (var i = a.length - 1; i > 0; i--) {
+    var j = Math.floor(Math.random() * (i + 1)), x = a[i]; a[i] = a[j]; a[j] = x;
+  }
+  return a;
+}
+
+// 次に流す曲の位置。選んでいるジャンルの中で進む。
+// auto は「曲が終わって自動で進む」とき（リピートなしなら、並びの終わりで止まる）
+function pickNext(auto) {
+  var scope = scopeList(), n = scope.length;
+  if (!n) return -1;
+  if (S.shuffle) {
+    var curKey = cur >= 0 ? tracks[cur].key : '';
+    var deal = function () {
+      var all = [];
+      scope.forEach(function (i) { if (!isBad(tracks[i]) && tracks[i].key !== curKey) all.push(tracks[i].key); });
+      return shuffled(all);
+    };
+    if (!bag) bag = deal();
+    bag = bag.filter(function (k) { return keyIndex[k] != null && k !== curKey && inScope(tracks[keyIndex[k]]) && !isBad(tracks[keyIndex[k]]); });
+    if (!bag.length) {
+      // ひととおり流し終えた
+      if (auto && S.repeat !== 'all') { bag = null; return -1; }
+      bag = deal();
+      if (!bag.length) return -1;
+    }
+    return keyIndex[bag.shift()];
+  }
+  var at = scope.indexOf(cur);   // いまの曲がこのジャンルの外なら -1（先頭から）
+  for (var d = 1; d <= n; d++) {
+    var j = at + d;
+    if (j >= n) {
+      if (auto && S.repeat !== 'all') return -1;
+      j = j % n;
+    }
+    if (!isBad(tracks[scope[j]])) return scope[j];
+  }
+  return -1;
+}
+
+function pickPrev() {
+  while (history.length) {
+    var k = history.pop();
+    if (keyIndex[k] != null && keyIndex[k] !== cur) return keyIndex[k];
+  }
+  var scope = scopeList(), n = scope.length, at = scope.indexOf(cur);
+  if (at < 0) at = 0;
+  for (var d = 1; d <= n; d++) {
+    var i = scope[((at - d) % n + n) % n];
+    if (!isBad(tracks[i])) return i;
+  }
+  return -1;
+}
+
+function firstPlayable() {
+  var scope = scopeList();
+  for (var i = 0; i < scope.length; i++) if (!isBad(tracks[scope[i]])) return scope[i];
+  return scope.length ? scope[0] : -1;
+}
+
+// これから鳴らす種類（'yt' か、それ以外＝音声）ではないほうを黙らせる。'' なら両方
+function quietOthers(type) {
+  if (!type || type === 'yt') dropAudio();
+  if (type !== 'yt' && YTE.player) {
+    try { YTE.player.stopVideo(); } catch (e) { /* 何も入っていない */ }
+    YTE.vid = '';
+  }
+}
+
+function playIndex(i, opt) {
+  opt = opt || {};
+  var t = tracks[i];
+  if (!t) return;
+  var auto = opt.auto !== false;
+  if (cur >= 0 && cur !== i && !opt.keepHistory && tracks[cur]) {
+    history.push(tracks[cur].key);
+    if (history.length > 300) history.shift();
+  }
+  cur = i;
+  want = auto;
+  status = auto ? 'loading' : 'paused';
+  offList = '';
+  pos = Math.max(0, opt.start || 0); dur = 0; live = t.type === 'radio';
+  if (live) pos = 0;
+  S.lastKey = t.key; S.lastPos = pos; saveSoon();
+  if (bag) bag = bag.filter(function (k) { return k !== t.key; });
+  if (t.type === 'yt') {
+    quietOthers('yt');
+    var token = ++playToken;
+    ytEnsure().then(function () {
+      if (token !== playToken || !tracks[cur] || tracks[cur].key !== t.key) return;
+      if (harvest.active && harvest.abort) harvest.abort();   // 再生リストの読み出し中なら、そちらをやめる
+      showStage();
+      ytLoad(tracks[cur], pos, want);
+    }, function () {
+      if (token !== playToken) return;
+      want = false; status = 'paused'; paintNow();
+    });
+  } else {
+    playToken++;
+    if (auto || t.type === 'file') {
+      quietOthers('audio');
+      audioLoad(t, pos, auto);
+    } else {
+      quietOthers('');   // 頭出しだけ: ネットの音声は、流すと決まるまでつながない
+    }
+  }
+  showStage();
+  markRows(); paintNow(); paintDial();
+  if (!opt.quiet) scrollToCurrent();
+}
+
+function resume() {
+  var t = tracks[cur];
+  if (!t) return;
+  want = true;
+  if (t.type === 'yt') {
+    if (!YTE.player || YTE.vid !== t.vid || YTE.state === 0) {
+      playIndex(cur, { start: YTE.state === 0 ? 0 : pos, keepHistory: true, quiet: true });
+      return;
+    }
+    status = 'loading';
+    YTE.loadAt = Date.now(); YTE.nudged = false; YTE.sawPlay = false;
+    YTE.player.playVideo();
+  } else {
+    // 放送は、止めていたあいだの分を飛ばして「いま」につなぎ直す
+    if (audioKey !== t.key || t.type === 'radio') { playIndex(cur, { start: pos, keepHistory: true, quiet: true }); return; }
+    status = 'loading';
+    audioPlay();
+  }
+  paintNow();
+}
+
+function pause() {
+  var t = tracks[cur];
+  want = false;
+  if (!t) return;
+  readPosition();
+  if (t.type === 'yt') {
+    if (YTE.player && YTE.vid === t.vid) { try { YTE.player.pauseVideo(); } catch (e) { /* 準備中 */ } }
+  } else if (t.type === 'radio') {
+    dropAudio();   // 止めているあいだは、放送につないだままにしない
+  } else if (!audio.paused) {
+    audio.pause();
+  }
+  status = 'paused';
+  savePosition();
+  paintNow(); paintDial();
+}
+
+function toggle() {
+  if (cur < 0) {
+    var i = firstPlayable();
+    if (i >= 0) playIndex(i);
+    return;
+  }
+  if (want && (status === 'playing' || status === 'loading')) pause(); else resume();
+}
+
+function next() {
+  var i = pickNext(false);
+  if (i >= 0) playIndex(i);
+}
+
+function prev() {
+  if (cur >= 0 && pos > 3 && !live) { seekTo(0); return; }
+  var i = pickPrev();
+  if (i >= 0) playIndex(i, { keepHistory: true });
+}
+
+function stopAll() {
+  playToken++;
+  quietOthers('');
+  cur = -1; want = false; status = 'idle'; offList = '';
+  pos = 0; dur = 0; live = false;
+  showStage(); markRows(); paintNow(); paintDial();
+}
+
+function onTrackEnd() {
+  var t = tracks[cur];
+  if (!t) return;
+  if (timer.mode === 'track') {
+    // 「この曲が終わったら止める」: 次の曲を頭出しだけして待つ（終了画面を出したままにしない）
+    timerOff();
+    toast('タイマーで止めました');
+    var after = pickNext(true);
+    if (after < 0) after = firstPlayable();
+    if (after >= 0) playIndex(after, { auto: false });
+    return;
+  }
+  if (S.repeat === 'one') {
+    playIndex(cur, { keepHistory: true, quiet: true });
+    return;
+  }
+  var ni = pickNext(true);
+  if (ni >= 0) { playIndex(ni); return; }
+  // 並びの終わり: 先頭を頭出しして止まる
+  var first = firstPlayable();
+  if (first >= 0) playIndex(first, { auto: false });
+  else { want = false; status = 'paused'; paintNow(); }
+}
+
+function seekTo(sec) {
+  var t = tracks[cur];
+  if (!t || live || !(dur > 0)) return;
+  sec = clamp(sec, 0, Math.max(0, dur - 0.25));
+  pos = sec;
+  if (t.type === 'yt') {
+    if (YTE.player && YTE.vid === t.vid) { try { YTE.player.seekTo(sec, true); } catch (e) { /* 準備中 */ } }
+  } else if (audioKey === t.key) {
+    try { audio.currentTime = sec; } catch (e) { /* 準備中 */ }
+  }
+  S.lastPos = pos; saveSoon();
+  paintDial();
+}
+
+function savePosition() {
+  if (cur < 0) return;
+  S.lastKey = tracks[cur].key;
+  S.lastPos = live ? 0 : Math.floor(pos);
+  saveSoon();
+}
+
+// ジャンルを選ぶ
+function setGenre(value) {
+  if (S.genre === value) return;
+  S.genre = value; bag = null; saveSoon();
+  renderChips(); fitFilter(); applyFilter();
+  $('list').scrollTop = 0;
+}
+
+// ポッドキャストの「ほかの回も」を開く・閉じる
+function togglePod(id) {
+  if (S.open[id]) delete S.open[id]; else S.open[id] = true;
+  saveSoon();
+  buildTracks(); renderList(); paintNow();
+}
+
+// ====================================================================== 音の大きさ
+// 音量は端末のボタンにまかせる。めざましの鳴りはじめだけ、小さな音から上げていく
+
+var fade = 1;
+function applyVolume() {
+  audio.volume = fade;
+  if (alarm.ringing && YTE.player && YTE.player.setVolume) {
+    try { YTE.player.setVolume(Math.round(fade * 100)); } catch (e) { /* 準備中 */ }
+  }
+}
+
+// ====================================================================== タイマー
+
+var timer = { mode: 'off', until: 0 };
+var TIMER_CHOICES = [
+  { id: 'off', label: '使わない' },
+  { id: '15', label: '15分後に止める', min: 15 },
+  { id: '30', label: '30分後に止める', min: 30 },
+  { id: '60', label: '60分後に止める', min: 60 },
+  { id: '90', label: '90分後に止める', min: 90 },
+  { id: 'track', label: 'この曲が終わったら' }
+];
+var timerChoice = 'off';
+
+function paintTimer() {
+  var left = $('timer-left'), text = '';
+  if (timer.mode === 'time') text = 'あと ' + fmtTime(Math.max(0, Math.ceil((timer.until - Date.now()) / 1000))) + ' で止まる';
+  else if (timer.mode === 'track') text = 'この曲で止まる';
+  $('b-timer').setAttribute('aria-pressed', timer.mode !== 'off' ? 'true' : 'false');
+  left.hidden = !text;
+  if (left.textContent !== text) left.textContent = text;
+}
+function timerOff() { timer.mode = 'off'; timer.until = 0; timerChoice = 'off'; paintTimer(); }
+function timerSet(id) {
+  var c = TIMER_CHOICES.filter(function (x) { return x.id === id; })[0];
+  if (!c || id === 'off') { timerOff(); return; }
+  timerChoice = id;
+  if (c.min) { timer.mode = 'time'; timer.until = Date.now() + c.min * 60000; }
+  else { timer.mode = 'track'; timer.until = 0; }
+  paintTimer();
+}
+function timerSet(id) {
+  var c = TIMER_CHOICES.filter(function (x) { return x.id === id; })[0];
+  if (!c || id === 'off') { timerOff(); return; }
+  timerChoice = id;
+  if (c.min) { timer.mode = 'time'; timer.until = Date.now() + c.min * 60000; }
+  else { timer.mode = 'track'; timer.until = 0; }
+  paintTimer();
+}
+function timerTick() {
+  if (timer.mode !== 'time') return;
+  if (Date.now() >= timer.until) {
+    timerOff();
+    if (want) { pause(); toast('タイマーで止めました'); }
+  } else {
+    paintTimer();
+  }
+}
+
+// ====================================================================== 0.5秒ごとの見回り
+
+
+function readPosition() {
+  var t = tracks[cur];
+  if (t && t.type === 'yt' && YTE.player && YTE.vid === t.vid && !harvest.active) {
+    var st = YTE.state;
+    try {
+      var d = YTE.player.getDuration() || 0, c = YTE.player.getCurrentTime() || 0;
+      live = !!ytData().isLive || (st === 1 && !(d > 0));
+      dur = live ? 0 : d;
+      if (!dragging && (st === 1 || st === 2 || st === 3)) pos = c;
+    } catch (e) { /* 準備中 */ }
+  } else if (t && t.type === 'radio') {
+    live = true; dur = 0;
+    if (audioKey === t.key) pos = audio.currentTime || 0;
+  } else if (t && t.type !== 'yt') {
+    var ad = audioKey === t.key ? audio.duration : 0;
+    live = false;
+    dur = isFinite(ad) && ad > 0 ? ad : (t.secs || 0);   // 読み込む前は、番組表に書かれた長さで代える
+    if (audioKey === t.key && !dragging && !audioPendingStart) pos = audio.currentTime || 0;
+  }
+}
+
+var tickCount = 0;
+var resting = false;   // 画面を別のもので覆っているあいだ（スマホ版の、めざましを待つ時計）は、目盛りを描かない
+function tick() {
+  tickCount++;
+  // 再生の見回りで何か起きても、そのあとの仕事（スマホ版ではめざまし）は必ず回す
+  try { watchPlayback(); } finally { extraTick(); }
+}
+function watchPlayback() {
+  var t = tracks[cur];
+  readPosition();
+  if (t && t.type === 'yt' && YTE.player && YTE.vid === t.vid && !harvest.active) {
+    var p = YTE.player, st = YTE.state;
+    if (st === 1 && tickCount % 4 === 0) { learnFromPlayer(true); paintNow(); }
+    // 再生が始まらないとき
+    if (want && !YTE.sawPlay && st !== 3) {
+      var waited = Date.now() - YTE.loadAt;
+      if (waited > WAIT.nudge && !YTE.nudged) {
+        YTE.nudged = true;
+        try { p.playVideo(); } catch (e) { /* 準備中 */ }
+      } else if (waited > WAIT.giveUp) {
+        stuckRun++;
+        if (stuckRun >= 2) {
+          want = false; status = 'paused'; stuckRun = 0;
+          toast('再生が始まりません。再生ボタンを押すか、ネットワークを確かめてください。', 9000);
+          paintNow();
+        } else {
+          var ni = pickNext(false);
+          toast('再生が始まらないので次の曲へ進みます：' + shownTitle(t));
+          if (ni >= 0 && ni !== cur) playIndex(ni); else { want = false; status = 'paused'; paintNow(); }
+        }
+      }
+    }
+  } else if (t && t.type !== 'yt' && audioKey === t.key && want && audioSince && Date.now() - audioSince > AUDIO_WAIT) {
+    audioTrouble();   // 音声が鳴りはじめない・途切れたまま
+  }
+  if (!document.hidden && !resting) paintDial();   // 見えていないあいだは描かない
+  if (tickCount % 2 === 0) timerTick();
+  if (status === 'playing' && tickCount % 10 === 0) savePosition();
+}
+
+// ====================================================================== タブが2つ開いているとき、音を出すのは1つだけ
+
+
+var chan = null, myId = Math.random().toString(36).slice(2);
+try {
+  chan = new BroadcastChannel('kikudake');
+  chan.onmessage = function (ev) {
+    var m = ev.data || {};
+    if (m.type === 'playing' && m.from !== myId && want) {
+      pause();
+      toast('別のタブで再生が始まったので、こちらは止めました。', 6000);
+    }
+  };
+} catch (e) { /* 使えなくても、ふつうに動く */ }
+function announcePlaying() {
+  if (!chan) return;
+  try { chan.postMessage({ type: 'playing', from: myId }); } catch (e) { /* 同上 */ }
+}
+
+// ====================================================================== 追加・はずす・ジャンルを作る
+
+
+function addFromInput() {
+  var input = $('add-url');
+  var raw = input.value.trim();
+  $('choose').hidden = true;
+  if (!raw) { input.focus(); return; }
+  var p = parseLine(raw);
+  if (p && p.kind === 'genre') { input.value = ''; makeGenre(p.name); return; }
+  if (p && p.kind !== 'unread') { addLine(p); return; }
+  var m = raw.match(/^(\S+)\s*(.*)$/);
+  var y = parseYT(m[1]);
+  if (y && y.kind === 'bad') { toast('自動生成の「ミックス」などは入れられません。曲そのもののURLを貼ってください。', 7000); return; }
+  var url = cleanUrl(m[1]);
+  if (!url) { toast('YouTube・ラジオ・ポッドキャストのどれかのURLを貼ってください。', 6000); return; }
+  if (appleId(url)) { addLine(parseLine('podcast ' + url + ' ' + m[2])); return; }
+  choose('YouTubeのURLではないようです。どちらとして追加しますか？', [
+    { id: 'radio', label: 'ラジオ（流れつづける放送）' },
+    { id: 'podcast', label: 'ポッドキャスト（番組のRSS）' }
+  ], function (kind) { addLine(parseLine(kind + ' ' + url + ' ' + m[2])); });
+}
+
+// 読み取った1行ぶんを、選んでいるジャンルに足す
+function addLine(p) {
+  var input = $('add-url');
+  var genre = S.genre === '*' ? '' : S.genre;
+  if (entries.some(function (e) { return e.genre === genre && e.kind === p.kind && e.id === p.id; })) {
+    toast('もうリストに入っています。'); input.value = '';
+    return;
+  }
+  var head = p.kind === 'video' ? 'https://www.youtube.com/watch?v=' + p.id
+    : p.kind === 'list' ? 'https://www.youtube.com/playlist?list=' + p.id
+      : p.kind + ' ' + p.url;
+  savePlaylist(function (text) { return textAdd(text, head, p.title, genre); }).then(function () {
+    input.value = '';
+    if (WORDS.blurAfterAdd) input.blur();
+    buildTracks(); renderList(); paintNow();
+    var insecure = (p.kind === 'radio' || p.kind === 'podcast') && location.protocol === 'https:' && /^http:/i.test(p.url);
+    toast(insecure ? '追加しました。ただし http:// で始まるものは、このページからは流せないことがあります（https:// のものを探してください）。'
+      : p.kind === 'video' ? '追加しました'
+        : p.kind === 'list' ? '再生リストを追加しました。曲の一覧を読み込みます…'
+          : p.kind === 'radio' ? 'ラジオを追加しました'
+            : 'ポッドキャストを追加しました。番組の一覧を読み込みます…', insecure ? 9000 : 0);
+    var suffix = genre ? '@' + genre : '';
+    var key = p.kind === 'video' ? 'yt:' + p.id + suffix : p.kind === 'radio' ? 'r:' + p.id + suffix : '';
+    if (key && rowEls[keyIndex[key]]) rowEls[keyIndex[key]].scrollIntoView({ block: 'nearest' });
+    if (p.kind === 'list') {
+      expandLists(false).then(function (r) {
+        if (r === 'busy') toast(WORDS.listBusy, 8000);
+      });
+    } else if (p.kind === 'video') {
+      ytEnsure().then(restoreStage, function () {});
+      queueTitles();
+    } else if (p.kind === 'podcast') {
+      refreshFeeds(false);
+    }
+  }, function () {
+    toast(WORDS.cantWrite);
+  });
+}
+
+// リストの上に出す、小さな問いかけ
+function choose(question, options, onPick) {
+  var box = $('choose');
+  box.textContent = '';
+  box.appendChild(el('span', 'choose-q', question));
+  var btns = el('span', 'choose-btns');
+  options.concat([{ id: '', label: 'やめる' }]).forEach(function (o) {
+    var b = el('button', o.id ? 'choose-b' : 'choose-b quiet', o.label);
+    b.type = 'button';
+    if (o.id) b.dataset.choice = o.id;
+    b.addEventListener('click', function () {
+      box.hidden = true;
+      if (o.id) onPick(o.id);
+    });
+    btns.appendChild(b);
+  });
+  box.appendChild(btns);
+  box.hidden = false;
+}
+
+function removeEntry(kind, id, genre) {
+  savePlaylist(function (text) { return textRemove(text, kind, id, genre); }).then(function () {
+    var elsewhere = entries.some(function (e) { return e.kind === kind && e.id === id; });   // ほかのジャンルにも同じものがある
+    if (!elsewhere && kind === 'list') { delete S.lists[id]; delete listStatus[id]; saveSoon(true); }
+    if (!elsewhere && kind === 'podcast') { delete S.feeds[id]; delete S.open[id]; delete feedStatus[id]; saveSoon(true); }
+    var gone = buildTracks();
+    if (gone) stopAll();
+    renderList(); paintNow();
+    toast(kind === 'list' ? '再生リストをはずしました' : kind === 'podcast' ? 'ポッドキャストをはずしました' : 'リストからはずしました');
+  }, function () {
+    toast(WORDS.cantWrite);
+  });
+}
+
+function openGenreForm(open) {
+  genreFormOpen = open;
+  $('genre-form').hidden = !open;
+  renderChips();
+  if (open) { $('genre-name').value = ''; $('genre-name').focus(); }
+}
+
+function makeGenre(raw) {
+  var name = cleanGenre(raw);
+  if (!name) { toast('ジャンルの名前を入れてください。'); return; }
+  savePlaylist(function (text) { return textAddGenre(text, name); }).then(function () {
+    buildTracks();
+    S.genre = name; bag = null; saveSoon();
+    openGenreForm(false);
+    renderList(); paintNow();
+    $('list').scrollTop = 0;
+    toast('「' + name + '」を選びました。下の欄から追加すると、このジャンルに入ります。', 6000);
+  }, function () {
+    toast(WORDS.cantWrite);
+  });
+}
+
+// 英語のラジオとポッドキャストのひとそろいを入れる
+function addPreset() {
+  savePlaylist(textAddPreset).then(function () {
+    buildTracks();
+    S.genre = PRESET[0][0]; bag = null; saveSoon();
+    openGenreForm(false);
+    renderList(); paintNow();
+    $('list').scrollTop = 0;
+    toast('英語のラジオとポッドキャストを入れました。番組の一覧を読み込みます…', 6000);
+    refreshFeeds(false);
+  }, function () {
+    toast(WORDS.cantWrite);
+  });
+}
+
+// ====================================================================== 読み直す・文字で編集
+
+function reloadLists() {
+  var hasPod = entries.some(function (e) { return e.kind === 'podcast'; });
+  if (hasPod) refreshFeeds(true);
+  expandLists(true).then(function (r) {
+    if (r === 'busy') toast('再生リストは、曲を止めてからもう一度選んでください。', 6000);
+    else if (r || hasPod) toast('読み直しました');
+    else toast('読み直すものがありません。');
+  });
+}
+
+function openEditor() {
+  closeSheet();
+  $('ed-text').value = S.text;
+  $('editor').hidden = false;
+}
+function closeEditor() {
+  $('editor').hidden = true;
+  $('ed-text').blur();
+}
+function saveEditor() {
+  var value = $('ed-text').value;
+  savePlaylist(function () { return value; }).then(function () {
+    closeEditor();
+    var gone = buildTracks();
+    if (gone) stopAll();
+    renderList(); paintNow();
+    toast('保存しました');
+    refreshFeeds(false);
+    if (!entries.some(function (e) { return e.kind === 'video' || e.kind === 'list'; })) return;
+    ytEnsure().then(function () { return expandLists(false); }).then(function (r) {
+      if (r === 'busy') toast(WORDS.listBusy, 8000);
+      restoreStage(); queueTitles();
+    }, function () {});
+  });
+}
+
+// 下から出る選択肢
+var sheetOpener = null;
+function openSheet(opener, title, items, onPick) {
+  var sheet = $('sheet');
+  sheet.textContent = '';
+  var head = el('div', 'sheet-head');
+  head.appendChild(el('span', '', title));
+  var x = el('button', 'sheet-x');
+  x.type = 'button'; x.setAttribute('aria-label', '閉じる');
+  x.innerHTML = icon('close');
+  x.addEventListener('click', closeSheet);
+  head.appendChild(x);
+  sheet.appendChild(head);
+  var box = el('div', 'sheet-items' + (items.length > 4 ? ' two' : ''));
+  sheet.appendChild(box);
+  items.forEach(function (c) {
+    var b = el('button', 'sheet-item' + (c.wide ? ' wide' : ''), c.label);
+    b.type = 'button';
+    b.dataset.pick = c.id;
+    if (c.checked != null) {
+      b.setAttribute('role', 'menuitemradio');
+      b.setAttribute('aria-checked', c.checked ? 'true' : 'false');
+    } else {
+      b.setAttribute('role', 'menuitem');
+    }
+    b.addEventListener('click', function () { closeSheet(); onPick(c.id); });
+    box.appendChild(b);
+  });
+  sheetOpener = opener;
+  $('toast').classList.remove('show');   // 前の知らせが選択肢に重ならないように
+  sheet.hidden = false;
+}
+function closeSheet() { $('sheet').hidden = true; sheetOpener = null; }
+
+// ====================================================================== めざまし
+// ウェブページは、画面が消えると時計も通信も止められてしまうことがある。そこで、待つあいだは
+// 画面をつけたまま（暗い時計だけを表示して）にしておき、時刻が来たら選んだものを流す。
+// つながるまでのあいだと、つながらなかったときは、このページの中で作ったチャイムを鳴らす。
+
+var SNOOZE = 10 * 60000;
+var LATE_LIMIT = 60 * 60000;   // これ以上遅れて気づいたときは、もう鳴らさない
+var RING = {
+  chimeEvery: 15000,      // 音が出はじめるまで、この間隔でチャイムをくり返す
+  fallbackAfter: 45000,   // これだけ待っても音が出なければ、ほかのラジオ・ポッドキャストに替える
+  fadeOver: 40000         // 小さな音から、この時間をかけてふつうの大きさにする
+};
+var alarm = {
+  armed: false, at: 0, snooze: false,
+  ringing: false, test: false, ringAt: 0, stopAt: 0,
+  confirmed: false, okTicks: 0, lastPos: -1, lastChime: 0, fellBack: false, prefetched: false
+};
+var wake = { lock: null, ok: null, charging: null };
+
+function two(n) { return (n < 10 ? '0' : '') + n; }
+function clockOf(ms) { var d = new Date(ms); return d.getHours() + ':' + two(d.getMinutes()); }
+// 次にその時刻（'HH:MM'）が来るとき
+function nextTime(hm, from) {
+  var now = from || Date.now(), d = new Date(now), p = hm.split(':');
+  d.setHours(+p[0], +p[1], 0, 0);
+  if (d.getTime() <= now + 5000) d.setDate(d.getDate() + 1);
+  return d.getTime();
+}
+
+// --- チャイム（3つの音がのぼっていく、2秒足らずの音）。通信がなくても鳴らせるよう、ここで波形を作る
+var chimeEl = null, chimeCount = 0;
+function makeChime() {
+  var rate = 22050, len = Math.floor(rate * 1.9), pcm = new Int16Array(len);
+  [[659.25, 0], [830.61, 0.42], [987.77, 0.84]].forEach(function (note) {
+    var f = note[0], start = Math.floor(note[1] * rate);
+    for (var i = start; i < len; i++) {
+      var t = (i - start) / rate;
+      var env = Math.min(1, t / 0.008) * Math.exp(-t * 3.2);
+      var v = Math.sin(2 * Math.PI * f * t) * 0.6 + Math.sin(4 * Math.PI * f * t) * 0.15;
+      pcm[i] = clamp(pcm[i] + v * env * 9000, -32767, 32767);
+    }
+  });
+  var head = new DataView(new ArrayBuffer(44)), bytes = len * 2;
+  function word(at, s) { for (var i = 0; i < s.length; i++) head.setUint8(at + i, s.charCodeAt(i)); }
+  word(0, 'RIFF'); head.setUint32(4, 36 + bytes, true); word(8, 'WAVE');
+  word(12, 'fmt '); head.setUint32(16, 16, true); head.setUint16(20, 1, true); head.setUint16(22, 1, true);
+  head.setUint32(24, rate, true); head.setUint32(28, rate * 2, true); head.setUint16(32, 2, true); head.setUint16(34, 16, true);
+  word(36, 'data'); head.setUint32(40, bytes, true);
+  return URL.createObjectURL(new Blob([head, pcm], { type: 'audio/wav' }));
+}
+function chime() {
+  chimeCount++;
+  try {
+    if (!chimeEl) { chimeEl = new Audio(); chimeEl.preload = 'auto'; chimeEl.src = makeChime(); }
+    chimeEl.currentTime = 0;
+    var p = chimeEl.play();
+    if (p && p.catch) p.catch(function () {});
+  } catch (e) { /* 鳴らせない端末では、流すものだけが頼り */ }
+  alarm.lastChime = Date.now();
+}
+
+// --- 画面をつけたままにする
+function wakeOn() {
+  if (!navigator.wakeLock || !navigator.wakeLock.request) { wake.ok = false; paintNight(true); return; }
+  if (wake.lock) return;
+  navigator.wakeLock.request('screen').then(function (lock) {
+    wake.lock = lock; wake.ok = true;
+    lock.addEventListener('release', function () {
+      if (wake.lock !== lock) return;
+      wake.lock = null;   // 画面が隠れると、ブラウザが自分で解く。戻ってきたときに取り直す
+      if ((alarm.armed || alarm.ringing) && !document.hidden) { wake.ok = false; paintNight(true); }
+    });
+    paintNight(true);
+  }, function () {
+    wake.ok = false; paintNight(true);
+  });
+}
+function wakeOff() {
+  var lock = wake.lock;
+  wake.lock = null;
+  if (lock) { try { lock.release().catch(function () {}); } catch (e) { /* もう解けている */ } }
+}
+if (navigator.getBattery) {
+  try {
+    navigator.getBattery().then(function (b) {
+      wake.charging = b.charging;
+      b.addEventListener('chargingchange', function () { wake.charging = b.charging; paintNight(true); });
+    }, function () {});
+  } catch (e) { /* わからなくても困らない */ }
+}
+
+// --- 流すものの選択肢。値は 'k:項目' / 'p:ポッドキャストのまとまり' / 'g:ジャンル' / 'chime'
+function alarmChoices() {
+  var direct = [], lists = [];
+  groups.forEach(function (grp) {
+    var where = grp.genre ? '〔' + grp.genre + '〕' : '';
+    if (grp.kind === 'radio') {
+      for (var i = grp.from; i < grp.to; i++) direct.push({ value: 'k:' + tracks[i].key, label: 'ラジオ: ' + shownTitle(tracks[i]) + where });
+    } else if (grp.kind === 'podcast') {
+      direct.push({ value: 'p:' + grp.id, label: '最新の回: ' + grp.label + where });
+    }
+  });
+  if (tracks.length) lists.push({ value: 'g:*', label: 'リストぜんぶを上から' });
+  genres.forEach(function (name) { lists.push({ value: 'g:' + name, label: 'ジャンル「' + name + '」を上から' }); });
+  return { direct: direct, lists: lists };
+}
+function alarmLabel(value) {
+  var c = alarmChoices(), all = c.direct.concat(c.lists);
+  for (var i = 0; i < all.length; i++) if (all[i].value === value) return all[i].label;
+  return 'チャイムだけ';
+}
+function alarmDefault() {
+  var c = alarmChoices();
+  return c.direct.length ? c.direct[0].value : c.lists.length ? c.lists[0].value : 'chime';
+}
+// 選ばれたものを、ジャンルと「どこから流すか」に直す。なくなっていたら null
+function alarmTarget(value) {
+  var id = value.slice(2), i;
+  if (value.indexOf('k:') === 0) {
+    i = keyIndex[id];
+    if (i != null) return { genre: tracks[i].genre, i: i };
+  } else if (value.indexOf('p:') === 0) {
+    var grp = groups.filter(function (g) { return g.id === id; })[0];
+    if (grp && grp.to > grp.from) return { genre: grp.genre, i: grp.from };
+  } else if (value.indexOf('g:') === 0) {
+    if (id === '*' ? tracks.length : genres.indexOf(id) >= 0) return { genre: id, i: -1 };
+  }
+  return null;
+}
+
+// --- 設定の画面
+function openAlarm() {
+  closeSheet();
+  var c = alarmChoices(), sel = $('al-src');
+  sel.textContent = '';
+  function fill(label, items) {
+    if (!items.length) return;
+    var og = document.createElement('optgroup');
+    og.label = label;
+    items.forEach(function (it) { var o = el('option', '', it.label); o.value = it.value; og.appendChild(o); });
+    sel.appendChild(og);
+  }
+  fill('ラジオ・ポッドキャスト', c.direct);
+  fill('リスト', c.lists);
+  var only = el('option', '', 'チャイムだけ'); only.value = 'chime';
+  sel.appendChild(only);
+  sel.value = S.alarm.src;
+  if (sel.value !== S.alarm.src || !S.alarm.src) sel.value = alarmDefault();
+  $('al-time').value = S.alarm.time;
+  $('al-len').value = String(S.alarm.len);
+  $('al-again').checked = S.alarm.again;
+  $('toast').classList.remove('show');   // 前の知らせが設定に重ならないように
+  $('alarm').hidden = false;
+  $('alarm').scrollTop = 0;
+}
+function closeAlarm() { $('alarm').hidden = true; }
+function readAlarmForm() {
+  var time = $('al-time').value.slice(0, 5);
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) { toast('鳴らす時刻を入れてください。'); return false; }
+  S.alarm = { time: time, src: $('al-src').value || 'chime', len: +$('al-len').value || 0, again: $('al-again').checked };
+  saveNow();
+  return true;
+}
+
+// --- 待つ
+function showNight(on) {
+  $('night').hidden = !on;
+  document.body.classList.toggle('night', on);
+  resting = on;
+  askNightOff(false);
+}
+// 「めざましをやめる」は2回押して確定（置くときに、うっかり触れて消してしまわないように）
+var nightAsk = 0;
+function askNightOff(on) {
+  clearTimeout(nightAsk); nightAsk = 0;
+  $('night-off').textContent = on ? 'もう一度押すと、やめます' : 'めざましをやめる';
+  if (on) nightAsk = setTimeout(function () { askNightOff(false); }, 4000);
+}
+function armAlarm(at, snooze) {
+  alarm.armed = true; alarm.at = at; alarm.snooze = !!snooze;
+  alarm.ringing = false; alarm.prefetched = false;
+  setNotice('alarm', '');
+  closeSheet(); closeAlarm();
+  // 時計で画面を覆うあいだ、YouTubeの映像は流さない（ラジオやポッドキャストは、そのまま聞きながら眠れる）
+  if (want && cur >= 0 && tracks[cur].type === 'yt') pause();
+  showNight(true);
+  wakeOn();
+  paintNight(true);
+}
+function disarm() {
+  alarm.armed = false;
+  showNight(false);
+  wakeOff();
+}
+var nightShown = '';
+function paintNight(force) {
+  if (!alarm.armed) return;
+  var now = Date.now(), d = new Date(now);
+  var stamp = d.getHours() + ':' + d.getMinutes();
+  if (!force && stamp === nightShown) return;   // 描き直すのは1分に1回
+  nightShown = stamp;
+  var mins = Math.max(0, Math.ceil((alarm.at - now) / 60000));
+  var left = mins >= 60 ? Math.floor(mins / 60) + '時間' + (mins % 60 ? (mins % 60) + '分' : '') : mins > 1 ? mins + '分' : 'まもなく';
+  $('night-clock').textContent = clockOf(now);
+  $('night-info').textContent = (alarm.snooze ? 'もう一度鳴らす時刻 ' : 'めざまし ') + clockOf(alarm.at) + '（' + (mins > 1 ? 'あと' + left : left) + '）';
+  $('night-src').textContent = alarmLabel(S.alarm.src);
+  var note = $('night-note'), warn = wake.ok === false;
+  note.textContent = warn
+    ? 'この端末では、画面をつけたままにできませんでした。画面が消えると鳴らせないので、端末の設定で、充電中は画面が消えないようにしてください。'
+    : wake.charging === false ? '充電器につながっていません。朝まで電池がもつよう、つないでおいてください。'
+      : '画面をつけたまま待っています。充電器につないで、このまま置いてください。まぶしければ、伏せて置けます。';
+  note.classList.toggle('warn', warn || wake.charging === false);
+  // 同じ場所を照らしつづけないよう、1分ごとに少しずらす
+  $('night-in').style.transform = 'translate(' + ((d.getMinutes() % 5) - 2) * 7 + 'px,' + ((d.getMinutes() % 3) - 1) * 10 + 'px)';
+}
+
+// --- 鳴らす
+function ring(test) {
+  var planned = alarm.at;
+  alarm.armed = false; alarm.ringing = true; alarm.test = !!test;
+  alarm.ringAt = Date.now();
+  alarm.stopAt = test ? alarm.ringAt + 3 * 60000 : S.alarm.len > 0 ? alarm.ringAt + S.alarm.len * 60000 : 0;
+  alarm.confirmed = false; alarm.okTicks = 0; alarm.lastPos = -1;
+  alarm.fellBack = S.alarm.src === 'chime';   // チャイムだけを選んだときは、ほかのものに替えない
+  showNight(false);
+  wakeOn();
+  closeSheet(); closeAlarm();
+  $('ring-title').textContent = test ? 'ためし鳴らし' : 'めざまし ' + clockOf(planned);
+  $('ring').hidden = false;
+  fade = 0.3;
+  chime();
+  // 流すものの準備で何か起きても、めざましとしては鳴りつづける（チャイムがくり返される）
+  try { startAlarmSource(); } catch (e) { setTimeout(function () { throw e; }, 0); }
+  applyVolume();
+}
+function useGenre(name) {
+  S.genre = genres.length ? name : '*';
+  if (S.genre === '' && !hasLoose()) S.genre = '*';
+  bag = null; saveSoon();
+  renderChips(); fitFilter(); applyFilter();
+}
+function startAlarmSource() {
+  var tg = alarmTarget(S.alarm.src);
+  if (!tg) return;   // チャイムだけ、または選んだものがリストから消えている
+  useGenre(tg.genre);
+  var i = tg.i;
+  if (i < 0) {
+    stopAll();
+    i = S.shuffle ? pickNext(false) : firstPlayable();
+  }
+  // YouTubeは、ページが見えているときにだけ流す。見えていないときは、同じ並びの音声をさがす
+  if (i >= 0 && tracks[i].type === 'yt' && document.hidden) {
+    i = scopeList().filter(function (j) { return tracks[j].type !== 'yt'; })[0];
+    if (i == null) i = -1;
+  }
+  if (i < 0) return;
+  if (tracks[i].type !== 'yt') delete badAudio[tracks[i].key];   // 夜のうちにつながらなかった放送も、朝はもう一度ためす
+  errRun = 0; stuckRun = 0; audioTries = 0;
+  playIndex(i);
+}
+// 選んだものから音が出ないとき: リストにあるラジオかポッドキャストを、かわりに流す
+function alarmFallback() {
+  var now = cur >= 0 ? tracks[cur].key : '';
+  for (var i = 0; i < tracks.length; i++) {
+    var t = tracks[i];
+    if (t.type === 'yt' || t.key === now || isBad(t)) continue;
+    useGenre(t.genre);
+    errRun = 0; audioTries = 0;
+    playIndex(i);
+    return;
+  }
+}
+function stopRing(how) {
+  var wasTest = alarm.test;
+  alarm.ringing = false; alarm.test = false;
+  $('ring').hidden = true;
+  fade = 1;
+  audio.volume = 1;
+  if (YTE.player && YTE.player.setVolume) { try { YTE.player.setVolume(100); } catch (e) { /* 準備中 */ } }
+  if (how === 'keep') { wakeOff(); toast('めざましを止めました。このまま流します。'); return; }
+  if (want) pause();
+  if (how === 'snooze') { armAlarm(Date.now() + SNOOZE, true); return; }
+  if (S.alarm.again && !wasTest) { armAlarm(nextTime(S.alarm.time), false); return; }
+  wakeOff();
+  if (how === 'auto' && !wasTest) setNotice('alarm', 'めざましは、決めた長さだけ鳴らして止めました。');
+}
+function missed() {
+  var when = clockOf(alarm.at);
+  disarm();
+  setNotice('alarm', 'めざまし（' + when + '）は鳴らせませんでした。画面が消えていたか、ブラウザがページを止めていたようです。');
+  if (S.alarm.again) armAlarm(nextTime(S.alarm.time), false);
+}
+
+// 0.5秒ごとの見回りから呼ばれる
+function extraTick() {
+  var now = Date.now();
+  if (alarm.armed) {
+    if (now >= alarm.at) {
+      if (now - alarm.at > LATE_LIMIT) missed(); else ring(false);
+      return;
+    }
+    // 鳴らす少し前に、ポッドキャストの新しい回を見に行く
+    if (!alarm.prefetched && alarm.at - now < 4 * 60000) { alarm.prefetched = true; refreshFeeds(true); }
+    paintNight(false);
+    return;
+  }
+  if (!alarm.ringing) return;
+  if (alarm.stopAt && now >= alarm.stopAt) { stopRing('auto'); return; }
+  if (!alarm.confirmed) {
+    // 「音が出ている」と見なすのは、再生中で、位置が進みつづけているとき
+    var moving = want && status === 'playing' && pos !== alarm.lastPos;
+    alarm.okTicks = moving ? alarm.okTicks + 1 : 0;
+    if (alarm.okTicks >= 3) alarm.confirmed = true;
+    else if (now - alarm.lastChime > RING.chimeEvery) chime();
+    if (!alarm.confirmed && !alarm.fellBack && now - alarm.ringAt > RING.fallbackAfter) { alarm.fellBack = true; alarmFallback(); }
+  }
+  alarm.lastPos = pos;
+  var f = clamp(0.3 + 0.7 * (now - alarm.ringAt) / RING.fadeOver, 0.3, 1);
+  if (f !== fade) { fade = f; applyVolume(); }
+}
+
+function wireAlarm() {
+  $('al-cancel').addEventListener('click', closeAlarm);
+  $('al-set').addEventListener('click', function () {
+    if (!readAlarmForm()) return;
+    chime();   // セットできた合図。ここで鳴った大きさが、朝の大きさの目安になる
+    armAlarm(nextTime(S.alarm.time), false);
+  });
+  $('al-test').addEventListener('click', function () {
+    if (!readAlarmForm()) return;
+    ring(true);
+  });
+  $('night-off').addEventListener('click', function () {
+    if (!nightAsk) { askNightOff(true); return; }
+    disarm(); toast('めざましをやめました');
+  });
+  $('ring-stop').addEventListener('click', function () { stopRing('stop'); });
+  $('ring-snooze').addEventListener('click', function () { stopRing('snooze'); });
+  $('ring-keep').addEventListener('click', function () { stopRing('keep'); });
+}
+
+function wireDial() {
+  var dial = $('dial');
+  function fracAt(ev) {
+    var r = dial.querySelector('.glass').getBoundingClientRect();
+    return clamp((ev.clientX - r.left) / Math.max(1, r.width), 0, 1);
+  }
+  dial.addEventListener('pointerdown', function (ev) {
+    if (cur < 0 || live || !(dur > 0) || ev.button > 0) return;
+    dragging = true;
+    try { dial.setPointerCapture(ev.pointerId); } catch (e) { /* なくても動く */ }
+    pos = fracAt(ev) * dur; paintDial();
+  });
+  dial.addEventListener('pointermove', function (ev) {
+    if (!dragging) return;
+    pos = fracAt(ev) * dur; paintDial();
+  });
+  function endDrag(ev) {
+    if (!dragging) return;
+    dragging = false;
+    if (ev.type === 'pointerup') seekTo(fracAt(ev) * dur);
+  }
+  dial.addEventListener('pointerup', endDrag);
+  dial.addEventListener('pointercancel', endDrag);
+  dial.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Home') { seekTo(0); ev.preventDefault(); }
+    else if (ev.key === 'End') { seekTo(dur); ev.preventDefault(); }
+  });
+}
+
+function wireShelf() {
+  var list = $('list');
+  list.addEventListener('click', function (ev) {
+    var rm = ev.target.closest('.rm');
+    if (rm) { ev.stopPropagation(); onRemoveClick(rm); return; }
+    var more = ev.target.closest('[data-pod]');
+    if (more) { togglePod(more.dataset.pod); return; }
+    var act = ev.target.closest('[data-act]');
+    if (act) { addPreset(); return; }
+    var row = ev.target.closest('.row');
+    if (!row) return;
+    var i = +row.dataset.i, t = tracks[i];
+    if (!t) return;
+    // 印のついたものを自分で選んだら、もう一度ためす
+    if (t.type === 'yt' && S.bad[t.vid]) { delete S.bad[t.vid]; saveSoon(true); paintRow(i); }
+    if (t.type !== 'yt' && badAudio[t.key]) { delete badAudio[t.key]; paintRow(i); }
+    errRun = 0; stuckRun = 0; audioTries = 0;
+    if (i === cur && want) return;
+    if (i === cur) resume(); else playIndex(i, { quiet: true });
+  });
+  list.addEventListener('keydown', function (ev) {
+    if (ev.target.classList && ev.target.classList.contains('row') && ev.key === 'Enter') {
+      ev.preventDefault(); ev.target.click();
+    }
+  });
+  $('filter').addEventListener('input', applyFilter);
+  $('add').addEventListener('submit', function (ev) { ev.preventDefault(); addFromInput(); });
+  $('genres').addEventListener('click', function (ev) {
+    var b = ev.target.closest('.chip');
+    if (!b) return;
+    if (b.id === 'b-genre-new') openGenreForm(true); else setGenre(b.dataset.genre);
+  });
+  $('genre-form').addEventListener('submit', function (ev) { ev.preventDefault(); makeGenre($('genre-name').value); });
+  $('genre-cancel').addEventListener('click', function () { openGenreForm(false); });
+  $('b-preset').addEventListener('click', addPreset);
+
+  // 通知やイヤホン、キーボードのメディアキーから（ラジオ・ポッドキャスト・音楽ファイルを流しているときに効く）
+  if ('mediaSession' in navigator) {
+    try {
+      navigator.mediaSession.setActionHandler('play', resume);
+      navigator.mediaSession.setActionHandler('pause', pause);
+      navigator.mediaSession.setActionHandler('nexttrack', next);
+      navigator.mediaSession.setActionHandler('previoustrack', prev);
+    } catch (e) { /* なくても困らない */ }
+  }
+}
+
+// 「はずす」は2回押して確定
+var askBtn = null, askTimer = 0;
+function unask() {
+  if (!askBtn) return;
+  clearTimeout(askTimer);
+  askBtn.classList.remove('ask');
+  askBtn.innerHTML = icon('close');
+  askBtn = null;
+}
+function onRemoveClick(btn) {
+  if (askBtn !== btn) {
+    unask();
+    askBtn = btn;
+    btn.classList.add('ask');
+    btn.textContent = 'はずす';
+    askTimer = setTimeout(unask, 3500);
+    return;
+  }
+  askBtn = null; clearTimeout(askTimer);
+  removeEntry(btn.dataset.rmKind, btn.dataset.rmId, btn.dataset.rmGenre);
+}
+
+// ====================================================================== 操作のつなぎこみ
+
+function wire() {
+  $('b-prev').innerHTML = icon('prev');
+  $('b-next').innerHTML = icon('next');
+  $('b-shuffle').innerHTML = icon('shuffle');
+  $('b-timer').innerHTML = icon('timer');
+  $('b-more').innerHTML = icon('more');
+
+  $('b-play').addEventListener('click', toggle);
+  $('b-next').addEventListener('click', next);
+  $('b-prev').addEventListener('click', prev);
+  $('b-shuffle').addEventListener('click', function () {
+    S.shuffle = !S.shuffle; bag = null; paintToggles(); saveSoon();
+    toast(S.shuffle ? 'シャッフルします' : '順番どおりに流します', 1800);
+  });
+  $('b-repeat').addEventListener('click', function () {
+    S.repeat = S.repeat === 'off' ? 'all' : S.repeat === 'all' ? 'one' : 'off';
+    paintToggles(); saveSoon();
+    toast(S.repeat === 'one' ? 'この曲をくり返します' : S.repeat === 'all' ? 'リスト全体をくり返します' : 'くり返しません', 1800);
+  });
+  $('b-timer').addEventListener('click', function () {
+    if (sheetOpener === this) { closeSheet(); return; }
+    var items = TIMER_CHOICES.map(function (c) {
+      return { id: c.id, label: c.label, checked: c.id === timerChoice };
+    });
+    items.push({ id: 'alarm', label: 'めざましをセットする…', wide: true });
+    openSheet(this, 'タイマー（選んだところで止まります）', items, function (id) {
+      if (id === 'alarm') openAlarm(); else timerSet(id);
+    });
+  });
+  $('b-more').addEventListener('click', function () {
+    if (sheetOpener === this) { closeSheet(); return; }
+    openSheet(this, 'リスト', [
+      { id: 'edit', label: 'リストを文字で編集する' },
+      { id: 'reload', label: '一覧を読み直す（再生リスト・ポッドキャスト）' },
+      { id: 'genre', label: 'ジャンルを作る' },
+      { id: 'preset', label: '英語のラジオとポッドキャストをまとめて入れる' }
+    ], function (id) {
+      if (id === 'edit') openEditor();
+      else if (id === 'reload') reloadLists();
+      else if (id === 'genre') openGenreForm(true);
+      else addPreset();
+    });
+  });
+  $('ed-cancel').addEventListener('click', closeEditor);
+  $('ed-save').addEventListener('click', saveEditor);
+
+  wireDial();
+  wireShelf();
+  wireAlarm();
+
+  document.addEventListener('pointerdown', function (ev) {
+    if (!$('sheet').hidden && !ev.target.closest('#sheet') && !(sheetOpener && sheetOpener.contains(ev.target))) closeSheet();
+    if (askBtn && ev.target !== askBtn && !askBtn.contains(ev.target)) unask();
+  });
+
+  // つないだキーボード用（なくても困らない）
+  document.addEventListener('keydown', function (ev) {
+    if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
+    var tg = ev.target, tag = tg && tg.tagName;
+    if (ev.key === 'Escape') {
+      closeSheet();
+      if (!$('editor').hidden) closeEditor();
+      if (!$('alarm').hidden) closeAlarm();
+      if (!$('genre-form').hidden) openGenreForm(false);
+      return;
+    }
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    var k = ev.key;
+    if (k === ' ' || k === 'Spacebar') { if (tag === 'BUTTON') return; toggle(); }
+    else if (k === 'ArrowRight') seekTo(pos + 5);
+    else if (k === 'ArrowLeft') seekTo(pos - 5);
+    else if (k === 'n' || k === 'N') next();
+    else if (k === 'p' || k === 'P') prev();
+    else return;
+    ev.preventDefault();
+  });
+
+  // 画面を離れるときに、いまの曲と位置を控える。戻ってきたら、めざましのために画面をつけたままにし直す
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) { readPosition(); savePosition(); saveNow(); return; }
+    paintDial(); paintNow();
+    if (alarm.armed || alarm.ringing) wakeOn();
+  });
+  window.addEventListener('pagehide', function () { savePosition(); saveNow(); });
+}
+
+// ====================================================================== 起動
+
+function boot() {
+  wire();
+  parseStored();
+  buildTracks();
+  // 前回の曲を、止めたまま頭出しする
+  if (S.lastKey && keyIndex[S.lastKey] != null) {
+    cur = keyIndex[S.lastKey];
+    pos = Math.max(0, S.lastPos || 0);
+    status = 'paused';
+  }
+  paintToggles(); paintTimer(); renderList(); readPosition(); paintNow(); paintDial(); scrollToCurrent();
+  saveNow();   // 保存できるブラウザかどうかも、ここでわかる
+  if (location.protocol === 'file:') {
+    setNotice('file', 'このページはファイルのままでは再生できません。https:// で始まる場所（GitHub Pages など）に置いて、そこから開いてください。');
+  } else {
+    if (entries.some(function (e) { return e.kind === 'video' || e.kind === 'list'; })) {
+      ytEnsure().then(function () {
+        return expandLists(false);
+      }).then(function () {
+        restoreStage(); queueTitles();
+      }, function () {});
+    }
+    refreshFeeds(false);
+  }
+  setInterval(tick, 500);
+}
+
+// テスト用の覗き窓（ふだんは使わない）
+window.__kiku = {
+  get state() {
+    return { cur: cur, key: cur >= 0 ? tracks[cur].key : '', want: want, status: status, pos: pos, dur: dur, live: live,
+      n: tracks.length, titles: tracks.map(shownTitle), keys: tracks.map(function (t) { return t.key; }),
+      bad: tracks.filter(isBad).map(function (t) { return t.key; }), timer: timer.mode, ytVid: YTE.vid, text: S.text,
+      genre: S.genre, genres: genres.slice(), scope: scopeList(), src: audio.getAttribute('src') || '', volume: audio.volume,
+      alarm: { armed: alarm.armed, at: alarm.at, ringing: alarm.ringing, confirmed: alarm.confirmed, snooze: alarm.snooze, test: alarm.test, fellBack: alarm.fellBack, set: S.alarm },
+      chimes: chimeCount, wake: wake.ok, locked: !!wake.lock, fade: fade };
+  },
+  parseYT: parseYT, timer: timer, wait: WAIT, alarm: alarm, ring: RING,
+  arm: function (ms) { armAlarm(Date.now() + ms, false); },
+  feeds: function () { return S.feeds; },
+  set audioWait(ms) { AUDIO_WAIT = ms; }
+};
+boot();
+})();
+</script>
+</body>
+</html>
